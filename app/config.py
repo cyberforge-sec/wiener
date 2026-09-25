@@ -56,6 +56,14 @@ class Config:
     # OpenAI-shaped endpoint) or "anthropic" (native Messages API). The
     # default targets the standard shape so no configuration is needed.
     CLOUD_ADAPTER: str = os.getenv("WIENER_CLOUD_ADAPTER", "openai_compatible")
+    # The model id this route is EXPECTED to serve, when the provider reports
+    # something other than the requested id. Gateways that route by prefix
+    # strip it (`gh/gpt-4o-mini-2024-07-18` -> `gpt-4o-mini-2024-07-18`).
+    # Declaring it makes the check auditable: the harness verifies the
+    # provider's own answer against it and records both. It must be a PINNED
+    # id (dated snapshot or explicit version); a floating alias cannot be
+    # declared into existence as a verifiable identity.
+    CLOUD_EXPECTED_MODEL: str = os.getenv("WIENER_CLOUD_EXPECTED_MODEL", "")
     # Native Anthropic rung, used only when CLOUD_ADAPTER=anthropic.
     ANTHROPIC_API_KEY: str = os.getenv("WIENER_ANTHROPIC_API_KEY", "")
     ANTHROPIC_BASE_URL: str = os.getenv("WIENER_ANTHROPIC_BASE_URL", "https://api.anthropic.com")

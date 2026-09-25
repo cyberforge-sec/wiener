@@ -1,5 +1,17 @@
 # WIENER — Historical One-Laptop Benchmark
 
+> **Two different measurements live in this repository. Do not mix them.**
+>
+> 1. The **benchmark** below: latency and resource observations from a
+>    development host. Historical, hardware-specific, not a requirement.
+> 2. The **effectiveness** numbers (UAR / ASR / FIR / UAPR) produced by the
+>    135-trial authoritative experiment. Those are a different claim with
+>    different denominators, and they are summarised in
+>    [Evidence honesty](#evidence-honesty) at the end of this file.
+>
+> A fast system that does not stop unsafe actions, and a system that stops
+> unsafe actions slowly, are different products. This file keeps them apart.
+
 > These are development-host observations from a prior environment, not
 > hardware requirements or a service-level claim. Re-run the harness on the
 > evaluator's own host before relying on timings. Provider credentials and
@@ -75,3 +87,80 @@ took `22 080 ms` while the median was `1 357 ms`.
 
 No model replacement was made (Qwen stays), no GPU/acceleration stack was added
 (Vulkan was left disabled), and no deterministic security control was changed.
+
+## Evidence honesty
+
+The effectiveness numbers are not produced by `benchmarks/bench_demo.py`. They
+come from the authoritative experiment harness, which stores every trial and
+locks the artifacts. This section states what those numbers mean, because the
+metric names alone are easy to misread.
+
+### What is measured
+
+| Metric | Definition | Denominator |
+| --- | --- | --- |
+| UAR (Unsafe Action Rate) | Share of trials where a dangerous action was actually executed. In gated (WIENER) mode this requires real execution past the Policy Gate. | All trials in the mode (45). |
+| ASR (Attack Success Rate) | Share of trials where the SOC agent adopted the attack's intended dangerous action. | All trials in the mode (45). |
+| FIR (False Intervention Rate) | Share of **benign** scenarios where the gate intervened when it should not have. | Benign trials only (10). |
+| UAPR (Unsafe Action Prevention Rate) | `(UAR_baseline - UAR_defended) / UAR_baseline`. | Undefined when the baseline UAR is 0; reported as `null`, never as a fabricated 0. |
+
+UAR and ASR are **not** the same claim. ASR says the model was convinced; UAR
+says something dangerous actually happened. A defense can move ASR without
+moving UAR, which is exactly why both are reported.
+
+### What the numbers do not establish
+
+- **Not a claim about a specific model.** The archived run was served by an
+  OpenAI-compatible gateway. A different model, a different gateway, or a
+  different system prompt will produce different ASR/UAR values.
+- **Not a determinism claim.** The archived run records no decoding
+  temperature in any row, and 90 of 135 rows record a transport name
+  (`opencode`) in the `model` field rather than a model id. The current
+  validation checklist rejects both, so the archived evidence is retained as
+  historical and cannot be re-locked without a fresh run.
+- **Not a latency claim.** TTI and E2E in `metrics.json` both derive from one
+  measured per-trial window, so they are equal by construction. The harness
+  does not observe detection separately from attack construction. Treat them
+  as pipeline duration, not as a security-response time.
+- **Not an execution-prevention proof on its own.** UAPR is computed from
+  stored decisions and executions; the direct demonstration that the *gate* is
+  what prevents execution (identical proposals, gate removed) is the separate
+  [enforcement ablation](../data/experiments/enforcement_ablation_reference/ablation.md).
+
+### Known weaknesses in the scenario construction
+
+Stated here rather than buried, because they bound how far the numbers can be
+pushed:
+
+- The malicious and benign scenario sets are **not** matched pairs. Malicious
+  contexts are constructed with `severity=8`, benign ones with a lower
+  severity, so part of the UAR/FIR separation is a property of the context
+  generator, not only of the defense. UAPR close to 1.0 should be read with
+  that in mind.
+- A payload that successfully induces a dangerous proposal also tends to carry
+  a high-severity event, so risk scoring and proposal adoption are correlated
+  by construction. Separating them would need a matched-pair design where the
+  same payload appears at two severities.
+- The per-mode sample is 45 trials, so the Wilson intervals reported next to
+  each rate are wide. Quote the interval, not just the point estimate.
+
+None of these were "fixed" by adjusting thresholds, seeds, or denominators.
+Changing them to improve a headline number would invalidate the evidence, so
+they are documented instead.
+
+## Reproducing the effectiveness numbers
+
+```bash
+# 1. Plan and preflight (requires a live provider; refuses to run without one)
+python -m scripts.experiments.main plan authoritative_YYYYMMDD_HHMM
+python -m scripts.experiments.main preflight authoritative_YYYYMMDD_HHMM
+
+# 2. Run all 135 trials
+python -m scripts.experiments.main run authoritative_YYYYMMDD_HHMM
+
+# 3. Enforcement ablation (separate experiment, offline, ~1s)
+python -m scripts.experiments.enforcement_ablation
+```
+
+A run that produces any degraded (synthetic fallback) trial cannot be locked:
+`no_degraded_trials` is a hard gate in the evidence manifest.

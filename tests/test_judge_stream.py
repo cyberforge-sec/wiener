@@ -385,3 +385,14 @@ def test_state_is_empty_after_reset():
     assert client.get("/judge/state").json()["last"] is not None
     client.post("/judge/reset")
     assert client.get("/judge/state").json()["last"] is None
+
+
+def test_restore_status_line_has_no_escaped_separator_leakage():
+    """Regression: the restored-run status line rendered a literal `00b7`
+    because the separator was double-escaped in the Python source."""
+    page = render_page()
+    line_start = page.index("Showing the last completed run")
+    line = page[line_start : line_start + 260]
+    assert "\\u00b7" not in line
+    assert "00b7" not in line
+    assert "\u00b7 Provider: " in line

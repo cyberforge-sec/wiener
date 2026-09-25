@@ -8,7 +8,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from pydantic import BaseModel
 
 from ..dashboard import DashboardData, ReportStore, build_dashboard, render_html
-from ..present.evidence import build_evidence_dashboard
+from ..dashboard.store import ReportStoreError
+from ..metrics.core import MetricsError
+from ..present.evidence import build_evidence_dashboard, load_errors
 from ..present.render import presentation_page
 from ..judge import (
     JudgeInputError,
@@ -82,12 +84,36 @@ def health() -> dict:
 def _latest_dashboard(trial: str | None):
     """Preferred presentation path: the LOCKED authoritative run. Falls back to
     the latest stored generic ExperimentReport only when the locked artifacts
-    are missing or unreadable."""
+    are missing or unreadable.
+
+    Fail-closed: a present-but-corrupt evidence directory (bad JSON, no trial
+    rows) must not degrade into an empty "no data" dashboard, so it surfaces as
+    HTTP 503 with the reason instead of silently showing zeros.
+    """
     data = build_evidence_dashboard()
     if data.evidence is not None:
         return data
-    report = ReportStore().load_latest()
-    return build_dashboard(report) if report is not None else None
+    if load_errors:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "authoritative evidence is present but could not be parsed: "
+                + "; ".join(load_errors)
+            ),
+        )
+    try:
+        report = ReportStore().load_latest()
+    except ReportStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if report is None:
+        return None
+    try:
+        return build_dashboard(report)
+    except MetricsError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"stored report metrics could not be computed: {exc}",
+        ) from exc
 
 
 @router.get("/dashboard")
@@ -145,6 +171,24 @@ def judge_page() -> HTMLResponse:
 def judge_logo() -> FileResponse:
     """The WIENER wordmark logo shown beside the brand name in the top bar."""
     return FileResponse(_LOGO_PATH, media_type="image/png")
+
+
+_JUDGE_CSS_PATH = Path(__file__).resolve().parent.parent / "judge" / "static" / "tailwind.css"
+
+
+@router.get("/judge/tailwind.css")
+def judge_tailwind_css() -> FileResponse:
+    """Vendored Judge UI stylesheet.
+
+    Served from the repository instead of cdn.tailwindcss.com so the Judge
+    page needs no network access and runs no third-party script. Regenerate
+    with ./scripts/build_judge_css.sh.
+    """
+    return FileResponse(
+        _JUDGE_CSS_PATH,
+        media_type="text/css",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @router.post("/judge/run")
@@ -220,7 +264,31 @@ def judge_reset() -> dict:
 
 @router.get("/judge/state")
 def judge_state() -> dict:
+    """Last committed run, so a page reload does not lose the judge's result.
+
+    Returns the rendered view alongside the metadata: the page cannot rebuild
+    the panel from summary fields, and re-running the scenario to recover it
+    would be a different request (a different slot) and therefore dishonest.
+    """
     session = get_session()
     if session.last is None:
         return {"last": None}
-    return {"last": run_to_meta(session.last)}
+    last = session.last
+    return {
+        "last": {
+            **run_to_meta(last),
+            "html": render_main_view(last),
+            "stopped_reason": last.stopped_reason,
+            "risk_score": last.result.risk.risk_score if last.result else None,
+            "tool_executed": last.result.tool_result.executed if last.result and last.result.tool_result else None,
+            "adaptive_trace": [
+                {
+                    "iteration": step.iteration,
+                    "decision": step.decision,
+                    "risk": step.risk,
+                    "kind": step.kind,
+                }
+                for step in last.adaptive_trace
+            ],
+        }
+    }

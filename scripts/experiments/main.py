@@ -16,6 +16,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app.config import config
+
 from .common import ROOT, env_snapshot, now_iso, prompt_manifest, repo_manifest, file_sha256, sha256
 from .lock import write_code_fingerprint, write_evidence_manifest
 from .metrics import write_metrics
@@ -25,7 +27,6 @@ from .validation import write_validation
 
 DATA_DIR = ROOT / "data" / "experiments"
 
-RANDOM_SEED = 20260708
 NUM_MALICIOUS_VARIANTS = 6  # it0..it6 => 35 malicious trials per mode (>=30)
 
 
@@ -57,9 +58,9 @@ def plan(experiment_id: str, out_dir: Path) -> dict:
         "malicious_per_mode": 35,
         "benign_per_mode": 10,
         "total_trials_per_mode": 45,
-        "random_seed": RANDOM_SEED,
+        "random_seed": config.MUTATION_SEED,
         "provider": "opencode",
-        "model": __import__("app.config", fromlist=["config"]).config.CLOUD_MODEL,
+        "model": config.CLOUD_MODEL,
         "endpoint_identifier": __import__("app.config", fromlist=["config"]).config.CLOUD_BASE_URL,
         "timeout_s": __import__("app.config", fromlist=["config"]).config.LLM_TIMEOUT_S,
         "response_format": __import__("app.config", fromlist=["config"]).config.CLOUD_RESPONSE_FORMAT,
@@ -86,7 +87,20 @@ def plan(experiment_id: str, out_dir: Path) -> dict:
             "replay": "replay validation only",
             "fallback_recorded_in_provider_meta": True,
         },
-        "temperature_policy": "0.0 fixed (determinism)",
+        "temperature_policy": {
+            "cloud_requested": config.CLOUD_TEMPERATURE,
+            "local_requested": config.LOCAL_TEMPERATURE,
+            "note": (
+                "Temperature is a REQUEST, not a guarantee. Each trial records the "
+                "value its provider reported in provider_meta.temperature plus "
+                "deterministic_requested. Hosted gateways may still sample at 0, and "
+                "the local rung defaults to 0.2, so no run is claimed bit-identical."
+            ),
+        },
+        "latency_basis": (
+            "TTI and E2E are both derived from one measured per-trial window "
+            "(request_start_ms -> request_end_ms); see scripts/experiments/metrics.py."
+        ),
         "no_modification": ["data/experiments/demo.json", "config/*.yaml", "app/metrics/core.py"],
         "trial_schema": "scripts.experiments.common.TrialRecord (Part E)",
     }

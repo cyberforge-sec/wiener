@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -8,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from html.parser import HTMLParser
 
 import pytest
+from fastapi import HTTPException
 
 from app.dashboard.dashboard import DashboardData
 from app.judge.judge_mode import run_judge
@@ -24,7 +26,13 @@ def test_load_evidence_authoritative_facts():
     assert b.evidence_status == "LOCKED_VERIFIED"
     assert b.locked_at is not None
     assert (b.code_fingerprint_root or "").startswith("15a61346")
-    assert b.source_provenance["status"] == "MATCH"
+    # Provenance is RECOMPUTED against the current tree, never read back from
+    # the manifest. The manifest recorded MATCH at lock time; the honest current
+    # value depends on how far the code has moved since, so the test asserts the
+    # mechanism, not a frozen constant.
+    assert b.source_provenance["status"] in {"MATCH", "STALE", "UNKNOWN"}
+    assert b.source_provenance["recorded_status"] == "MATCH"
+    assert b.source_provenance.get("current_root_hash")
     assert b.n_trials == 135, b.n_trials
     assert b.trials_per_mode == 45
     assert b.modes == ("no_defense", "basic_prompt_defense", "wiener")
@@ -96,13 +104,18 @@ def test_presentation_page_phrases_and_attrs():
     assert "HISTORICAL" not in page
     assert "40.0%" not in page and "70.0%" not in page
     assert "demo.json" not in page
-    # Locked badge renders from the manifest, not a hardcoded string.
-    assert "LOCKED EVIDENCE · 16 / 16 PASS · VERIFIED" in page
+    # Locked badge renders from the recomputed state, not a hardcoded string.
+    # The archived artifacts are intact but were produced by an earlier
+    # revision, so the badge must not claim VERIFIED.
     assert "CANDIDATE EVIDENCE" not in page.split('<main')[0]
+    assert "ARTIFACTS INTACT" in page
+    assert "VERIFIED" not in page.split('<main')[0]
     # Five areas + evidence + provenance.
     for area in ("RED AI", "SOC AGENT", "BLUE AI", "RISK ENGINE / POLICY GATE", "METRICS"):
         assert area in page
-    assert "Provenance" in page and "AUTHORITATIVE DATA LOCKED" in page
+    assert "Provenance" in page
+    # The lock phrase follows the recomputed soundness, not a constant.
+    assert ("AUTHORITATIVE DATA LOCKED" in page) != ("AUTHORITATIVE DATA NOT VERIFIED" in page)
     assert "data/experiments/authoritative_20260925_zero_degraded/" in page
     assert (data_attrs := _attrs(page))
     assert data_attrs["authoritative"] == "true"
@@ -126,13 +139,57 @@ def test_presentation_page_zero_never_looks_like_attack_counting():
 
 
 def test_presentation_page_exposes_source_provenance_status():
-    d = build_evidence_dashboard(load_evidence())
+    bundle = load_evidence()
+    d = build_evidence_dashboard(bundle)
     page = presentation_page(d)
 
-    assert 'data-source-provenance="match"' in page
+    status = bundle.source_provenance["status"]
+    assert f'data-source-provenance="{status.lower()}"' in page
     assert "SOURCE TREE" in page
-    assert "STATUS: VERIFIED SOUND" in page
-    assert "LOCKED EVIDENCE · 16 / 16 PASS · VERIFIED" in page
+    # The headline claim follows the recomputed provenance, not the manifest.
+    if status == "match":
+        assert "STATUS: VERIFIED SOUND" in page
+        assert "LOCKED EVIDENCE · 16 / 16 PASS · VERIFIED" in page
+    else:
+        assert "STATUS: ARTIFACTS INTACT · PRODUCED BY AN EARLIER REVISION" in page
+        assert "LOCKED EVIDENCE" not in page
+
+
+def test_dashboard_trials_come_from_the_bundles_own_directory():
+    """Regression: a supplied bundle must never be paired with another run's
+    trials (metrics from one experiment, ledger rows from another)."""
+    bundle = load_evidence()
+    data = build_evidence_dashboard(bundle)
+    assert data.trials, "expected trials for the loaded evidence"
+    # The loaded bundle is the locked run; the metrics and the drill-down must
+    # come from the same experiment id.
+    assert data.experiment_id == bundle.experiment_id
+    # Every rendered trial must exist in the bundle's own directory.
+    bundle_dir = Path(__file__).resolve().parent.parent / "data" / "experiments" / bundle.source_dir
+    assert bundle_dir.exists()
+    assert (bundle_dir / "trials.jsonl").exists()
+
+
+def test_dashboard_renders_stored_evidence_values():
+    bundle = load_evidence()
+    wiener = replace(bundle.by_mode["wiener"], incorrect_interventions=3)
+    altered = replace(
+        bundle,
+        by_mode={**bundle.by_mode, "wiener": wiener},
+        recompute_diffs=("uar mismatch",),
+        validation_status="FAIL",
+        validation_pass=15,
+        duplicate_trial_mode_ids=2,
+        evidence_status="CANDIDATE",
+    )
+
+    page = presentation_page(build_evidence_dashboard(altered))
+
+    assert "3 False Positives" in page
+    assert "1 Detected" in page
+    assert "15 / 16" in page
+    assert "2 Collisions" in page
+    assert "CANDIDATE EVIDENCE" in page
 
 
 def _render_for(action: str) -> dict:
@@ -210,3 +267,106 @@ def test_run_to_meta_includes_presentation_fields():
     assert meta["decision"] == "ALLOW"
     assert meta["decision_label"] == "ALLOWED SIMULATED EXECUTION"
     assert meta["provider_tier"] == "live"
+
+def test_corrupt_evidence_fails_closed_instead_of_rendering_empty(tmp_path, monkeypatch):
+    """A present-but-unparseable evidence directory must not look like an empty run."""
+    import app.api.routes as routes
+    from app.present.evidence import EvidenceUnavailable, load_evidence, load_errors
+
+    broken = tmp_path / "authoritative_broken"
+    broken.mkdir()
+    (broken / "trials.jsonl").write_text("{not json}\n", encoding="utf-8")
+    (broken / "metrics.json").write_text("{}", encoding="utf-8")
+
+    # Non-strict: recorded, not raised.
+    assert load_evidence(broken) is None
+    assert load_errors, "failure reason must be recorded"
+
+    # Strict: raised.
+    with pytest.raises(EvidenceUnavailable):
+        load_evidence(broken, strict=True)
+
+    # And the route surfaces it as 503, not a blank dashboard.
+    monkeypatch.setattr(routes, "build_evidence_dashboard", lambda *a, **k: DashboardData.empty())
+    with pytest.raises(HTTPException) as ei:
+        routes._latest_dashboard(None)
+    assert ei.value.status_code == 503
+    assert "could not be parsed" in ei.value.detail
+
+
+def test_missing_evidence_is_not_an_error(tmp_path):
+    """Absent evidence is a normal state (fresh clone), not a failure."""
+    from app.present.evidence import load_evidence, load_errors
+
+    absent = tmp_path / "does_not_exist"
+    assert load_evidence(absent) is None
+    assert load_errors == []
+
+
+def test_source_provenance_is_recomputed_not_read_from_the_manifest(tmp_path):
+    """The manifest's `source_provenance: MATCH` was true when the run was
+    locked. After any code change it is a historical fact, and the dashboard
+    must not present it as the current state."""
+    import json
+    import shutil
+    from dataclasses import replace as dc_replace
+
+    from app.present.evidence import _load
+
+    src = Path(__file__).resolve().parent.parent / "data" / "experiments"
+    live = load_evidence()
+    assert live is not None
+    source_dir = src / live.source_dir
+    copy = tmp_path / live.source_dir
+    shutil.copytree(source_dir, copy)
+
+    # Tamper with the current tree's fingerprint: the stored one can no longer match.
+    fp = json.loads((copy / "code_fingerprint.json").read_text(encoding="utf-8"))
+    fp["file_hashes"] = {k: "0" * 64 for k in fp["file_hashes"]}
+    fp["root_hash"] = "f" * 64
+    (copy / "code_fingerprint.json").write_text(json.dumps(fp), encoding="utf-8")
+
+    bundle = _load(copy)
+    # The manifest still says MATCH ...
+    manifest = json.loads((copy / "evidence_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["source_provenance"]["status"] == "MATCH"
+    # ... but the recomputed value does not.
+    assert bundle.source_provenance["status"] == "STALE"
+    assert bundle.source_provenance["recorded_status"] == "MATCH"
+    assert "earlier revision" in bundle.source_provenance["note"]
+
+    # And a locked bundle that is not sound must not claim VERIFIED.
+    page = presentation_page(build_evidence_dashboard(bundle))
+    assert "VERIFIED SOUND" not in page
+    assert "REVIEW REQUIRED" in page
+
+
+def test_unknown_provenance_when_fingerprint_absent(tmp_path):
+    import json
+    import shutil
+
+    from app.present.evidence import _load
+
+    live = load_evidence()
+    assert live is not None
+    src = Path(__file__).resolve().parent.parent / "data" / "experiments" / live.source_dir
+    copy = tmp_path / live.source_dir
+    shutil.copytree(src, copy)
+    (copy / "code_fingerprint.json").unlink()
+
+    bundle = _load(copy)
+    assert bundle.source_provenance["status"] == "UNKNOWN"
+    assert bundle.source_provenance["recorded_status"] == "MATCH"
+
+
+def test_dashboard_page_makes_no_external_requests():
+    """The dashboard must render identically offline: no webfont, no CDN.
+
+    Both pages previously pulled Google Fonts, which meant a judge's browser
+    silently contacted a third party on every view of the evidence page.
+    """
+    page = presentation_page(build_evidence_dashboard(load_evidence()))
+    for banned in ("fonts.googleapis.com", "fonts.gstatic.com", "cdn."):
+        assert banned not in page, f"dashboard must not reference {banned}"
+    # System stack, declared in-page.
+    assert "-apple-system" in page

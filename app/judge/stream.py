@@ -23,6 +23,10 @@ STAGE_ORDER = LIVE_STAGE_ORDER
 
 _TERMINAL = frozenset({"run_completed", "run_failed"})
 
+# Per-consumer SSE backlog. Bounded so an abandoned/slow HTTP client cannot
+# grow process memory; the full history stays in ``_LiveRun.log``.
+_CONSUMER_QUEUE_MAXSIZE = 512
+
 
 class _LiveRun:
     """One live run's broadcast state.
@@ -147,14 +151,29 @@ class LiveRunStore:
         return run_id
 
     def _broadcast(self, run: _LiveRun, payload: dict) -> None:
+        terminal = payload.get("event") in _TERMINAL
         with run.lock:
             run.log.append(payload)
             subs = list(run.subs)
         for subscriber in subs:
-            try:
-                subscriber.put_nowait(payload)
-            except queue.Full:
-                pass  # slow consumer → skip intermediate events, terminal still queued
+            if terminal:
+                # A terminal event is the only thing a client cannot recover
+                # from the run log, so it is never dropped. Make room by
+                # discarding the oldest intermediate event if the queue is full.
+                while True:
+                    try:
+                        subscriber.put_nowait(payload)
+                        break
+                    except queue.Full:
+                        try:
+                            subscriber.get_nowait()
+                        except queue.Empty:  # pragma: no cover - racy drain
+                            continue
+            else:
+                try:
+                    subscriber.put_nowait(payload)
+                except queue.Full:
+                    pass  # slow consumer: skip intermediates, terminal still queued
 
     def _run_started_payload(self, run_id: int, provider: str, scenario: str) -> dict:
         return {
@@ -192,9 +211,18 @@ class LiveRunStore:
     def iter_run(self, run: _LiveRun) -> Iterator[dict]:
         """Walk one run's stream via its queue; refcounted so the entry is only
         dropped once ALL consumers have detached (broadcast, not single-reader)."""
-        own = queue.Queue()
+        # Bounded: a consumer that stops reading can never grow server memory
+        # without limit. A full queue drops intermediate events (the client
+        # catches up from the authoritative run.log on the next reconnect) and
+        # the terminal event is always delivered.
+        own = queue.Queue(maxsize=_CONSUMER_QUEUE_MAXSIZE)
         with run.lock:
-            for event in run.log:  # replay the full history first (reconnect-safe)
+            # Replay the history first (reconnect-safe). If the run produced
+            # more events than one consumer may buffer, keep the most recent
+            # window: a late/reconnecting client cares about current state, and
+            # the full log stays in ``run.log`` for audit.
+            history = run.log[-_CONSUMER_QUEUE_MAXSIZE:]
+            for event in history:
                 own.put_nowait(event)
             if not run.done:
                 run.subs.add(own)

@@ -290,3 +290,109 @@ def test_stream_page_wiring_no_fake_timers():
     # The animation is SSE-driven only: no client timers, no stage indices.
     for banned in ("setInterval(", "setTimeout(", "stageIndex"):
         assert banned not in html
+
+def test_consumer_queue_is_bounded_and_terminal_event_always_arrives():
+    """A slow/abandoned SSE client must not grow server memory without bound,
+    and a bounded queue must still deliver the terminal event."""
+    import queue as _queue
+
+    from app.judge.stream import _CONSUMER_QUEUE_MAXSIZE, _LiveRun, LiveRunStore
+
+    store = LiveRunStore()
+    run = _LiveRun(999)
+    store._runs[999] = run
+
+    it = store.iter_run(run)
+    next(it)  # registers the consumer queue on first advance
+
+    with run.lock:
+        queues = list(run.subs)
+    assert len(queues) == 1
+    assert queues[0].maxsize == _CONSUMER_QUEUE_MAXSIZE
+
+    # Never read again: flood far past the bound.
+    for i in range(_CONSUMER_QUEUE_MAXSIZE * 3):
+        store._broadcast(run, {"event": "soc_agent_started", "i": i})
+    assert queues[0].qsize() <= _CONSUMER_QUEUE_MAXSIZE
+
+    # A terminal event is never dropped, even on a saturated queue.
+    store._broadcast(run, {"event": "run_completed", "run_id": 999})
+    drained = []
+    while True:
+        try:
+            drained.append(queues[0].get_nowait())
+        except _queue.Empty:
+            break
+    assert drained[-1]["event"] == "run_completed"
+    it.close()
+
+
+def test_judge_page_has_no_third_party_requests():
+    """Regression: the Judge UI must not depend on any external host.
+
+    It used to load cdn.tailwindcss.com (unpinned, unsigned, remote script
+    execution) and two Google Fonts stylesheets, so the demo silently broke
+    offline and ran third-party code in a security PoC.
+    """
+    html = render_page()
+    for banned in (
+        "cdn.tailwindcss.com",
+        "fonts.googleapis.com",
+        "fonts.gstatic.com",
+        "material-symbols",
+        "<script src=\"http",
+    ):
+        assert banned not in html, f"Judge page must not reference {banned}"
+    assert '<link rel="stylesheet" href="/judge/tailwind.css">' in html
+    # Local stylesheet is actually served.
+    resp = client.get("/judge/tailwind.css")
+    assert resp.status_code == 200
+    assert "text/css" in resp.headers["content-type"]
+    assert len(resp.content) > 1000
+    # Icons are inline SVG, so no webfont is needed for the UI chrome.
+    assert "<svg" in html and 'class="ico' in html
+
+
+def test_state_endpoint_returns_the_rendered_last_run():
+    """A reload must not lose the judge's result: the page restores the stored
+    run, and it must be labelled as restored rather than freshly executed."""
+    _reset_session()
+    run = client.post("/judge/run", json={"provider": "replay", "scenario": "normal"})
+    assert run.status_code == 200
+
+    state = client.get("/judge/state")
+    assert state.status_code == 200
+    last = state.json()["last"]
+    assert last is not None
+    assert last["html"], "state must carry the rendered view, not only summary fields"
+    assert "run-shell" in last["html"]
+    assert last["decision"] is not None
+    assert last["scenario"] == "normal"
+    assert last["provider_used"]
+    # Risk and tool outcome travel with the restore, not just the verdict.
+    assert last["risk_score"] is not None
+    assert "tool_executed" in last
+
+    page = render_page()
+    assert "/judge/state" in page
+    assert "restoreLast" in page
+    assert "restored, not re-executed" in page
+
+
+def test_state_is_empty_after_reset():
+    _reset_session()
+    client.post("/judge/run", json={"provider": "replay", "scenario": "normal"})
+    assert client.get("/judge/state").json()["last"] is not None
+    client.post("/judge/reset")
+    assert client.get("/judge/state").json()["last"] is None
+
+
+def test_restore_status_line_has_no_escaped_separator_leakage():
+    """Regression: the restored-run status line rendered a literal `00b7`
+    because the separator was double-escaped in the Python source."""
+    page = render_page()
+    line_start = page.index("Showing the last completed run")
+    line = page[line_start : line_start + 260]
+    assert "\\u00b7" not in line
+    assert "00b7" not in line
+    assert "\u00b7 Provider: " in line

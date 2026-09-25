@@ -307,13 +307,35 @@ policy verdict, and simulated-tool result.
 
 ## 14. Testing
 
+The test dependencies are declared separately from the runtime dependencies, so a
+clean clone can run the suite without installing anything extra by accident:
+
 ```bash
+python -m pip install -r requirements-dev.txt   # includes requirements.txt + pytest
 python -m pytest -q
 WIENER_LLM_FORCE=replay ./run_healthcheck
 WIENER_LLM_FORCE=replay ./run_replay --scenario ALL --validate --runs 3
 ```
 
+Installing only `requirements.txt` gives you the application; the suite needs
+`pytest` from `requirements-dev.txt`.
+
 The health check reports unavailable cloud/Ollama as warnings because replay is a supported fallback.
+
+### Test suite at a glance
+
+The suite runs fully offline (replay/fake providers) and needs no credentials.
+It covers the authorization boundary, provider contracts, retry and provenance
+behaviour, the evidence/validation layer, and the presentation layer.
+
+| Area | What is asserted |
+| --- | --- |
+| `test_policy_gate.py`, `test_tool_executor.py` | A non-`ALLOW` decision can never reach a simulated tool; the executor re-checks the decision itself; every action in the vocabulary has a simulated tool. |
+| `test_metrics.py`, `test_dashboard.py` | UAR/ASR/FIR/UAPR are computed only from stored trial fields; malformed input raises instead of returning a plausible number. |
+| `test_provider_contract.py` | Cloud and local providers report the model id and requested temperature; the local rung uses real system/user roles when the server supports it and says so when it does not. |
+| `test_provenance.py` | A transport name in the `model` field, an unrecorded temperature, a missing duration, and an absolute clock value leaking into a latency delta are all failures. |
+| `test_present.py` | The dashboard renders stored values rather than literals, and corrupt evidence fails closed. |
+| `test_enforcement_ablation.py` | The ablation is deterministic, keeps its own artifacts, and cannot touch the authoritative evidence. |
 
 ## 15. Verification
 
@@ -344,8 +366,40 @@ The health check reports unavailable cloud/Ollama as warnings because replay is 
 
 Never commit `.env`, API keys, tokens, provider diagnostics, runtime logs, or environments. Diagnostic capture is disabled by default because responses can be sensitive. The Policy Gate is a simulation authorization boundary, not production access control.
 
+The server binds `127.0.0.1` by default and has **no authentication**. Anyone who can reach the port can drive the pipeline. Only set `WIENER_API_HOST=0.0.0.0` on a trusted, isolated network.
+
 ## 18. Project Status
 
 Implemented: FastAPI API, Judge Mode, cloud/local/replay providers, Red AI loop, SOC/Blue/Risk/Policy pipeline, deterministic replay, tests, and simulated tools. Cloud and Ollama are the live-evaluation integrations; replay is offline setup verification. All tool execution and dashboard evidence are simulated/PoC artifacts. WIENER is not production-ready.
 
 See [architecture](docs/architecture.md), [setup notes](docs/competition_setup.md), [demo runbook](docs/DEMO_RUNBOOK.md), [contracts](docs/contracts.md), and [benchmark notes](docs/BENCHMARK.md).
+
+## 19. Evidence and Experiments
+
+Three different things live in `data/experiments/`, and they are not
+interchangeable. Confusing them is the fastest way to make an honest number
+look dishonest.
+
+| Directory | What it is | Status |
+| --- | --- | --- |
+| `authoritative_20260925_zero_degraded` | The 135-trial benchmark: 45 trials x 3 modes, live provider, locked artifacts. The source of the dashboard headline numbers. | Historical. Its `model` field records a transport name on 90 of 135 rows and no trial recorded its decoding temperature, so it does **not** satisfy the current validation checklist. Kept unmodified. |
+| `authoritative_20260912_clean_2252` | The earlier 10-trial run. | Historical only. Its anomaly was not reproduced. |
+| `enforcement_ablation_reference` | A separate experiment answering "is safety from the prompt or from the gate?" | Current, deterministic, offline. |
+
+Regenerate the ablation (one command, no credentials, ~1 second):
+
+```bash
+python -m scripts.experiments.enforcement_ablation
+```
+
+It reports, for identical proposals and identical model output: with the gate
+removed, every dangerous proposal is executed; with the gate enforced, none is;
+benign proposals still pass; and the verdict does not change when the payload
+contains an override instruction. The number that prevents execution is the
+Policy Gate, not the prompt text.
+
+The authoritative benchmark is a separate, much larger question (how often a
+live model proposes something dangerous). Its two figures are UAR (unsafe
+execution rate) and UAPR (unsafe action prevention rate). Read
+[docs/BENCHMARK.md](docs/BENCHMARK.md) before quoting either: it states the
+denominators, the Wilson intervals, and what the numbers do not establish.

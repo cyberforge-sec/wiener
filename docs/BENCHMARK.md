@@ -64,7 +64,7 @@ took `22 080 ms` while the median was `1 357 ms`.
    cloud-primary architecture is justified by measured numbers, so it stays.
 2. **Cloud variance is the demo risk** (timeouts + a 22 s outlier). Mitigation
    is operational, not architectural: pre-flight reachability check, Qwen kept
-   warm, and the existing downward-only failover (opencode → local → replay).
+   warm, and the existing downward-only failover (cloud → local Ollama → replay).
 3. **Qwen keeps a ~1.6 s floor on CPU.** Pre-warming the model avoids a
    **7.7 s** cold hitch mid-demo. `WIENER_LOCAL_KEEP_ALIVE` (default `5m`)
    keeps it resident after the first call.

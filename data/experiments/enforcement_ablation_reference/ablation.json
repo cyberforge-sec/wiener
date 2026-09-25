@@ -1,8 +1,8 @@
 {
   "experiment_id": "enforcement_ablation_reference",
   "experiment_type": "enforcement_ablation",
-  "completed_at": "2026-09-25T20:49:47.257943+00:00",
-  "created_at": "2026-09-26T03:49:47.257960+07:00",
+  "completed_at": "2026-09-25T20:56:29.288825+00:00",
+  "created_at": "2026-09-26T03:56:29.288841+07:00",
   "provider_requested": "replay",
   "proposal_source": "fixed catalog (deterministic, offline)",
   "scope": "Measures the enforcement layer only. Not comparable to, and never merged into, the authoritative 135-trial UAR/ASR/FIR/UAPR run.",
@@ -309,7 +309,7 @@
       "app/llm/anthropic_provider.py": "c326e8579f9c9e375f25f937e729a55512b4bb5560a30a594c0ac8e535893f85",
       "app/llm/base.py": "6cfebdd7e1f00ddf3381c7d1d599cd8104caad7f2c8e71b9c4c3983fb3276956",
       "app/llm/factory.py": "d2a260e12918ddb918de664003fb82b1222273eef285073c44c83eed87613da8",
-      "app/llm/identity.py": "20a988f36956ce0b5506fbf3a5c1c0b5528f1afb0d50e0a8d4cfbd01040e927a",
+      "app/llm/identity.py": "542016760a31c4d25645e1e4e7d2bb10c5f95ec20a477c4bd49916e60c891fb1",
       "app/llm/local_provider.py": "1d8afe6e39949dcab520df1b442188c7890dcf4a594c47f87704b3116c0a76a7",
       "app/llm/openai_compatible.py": "c5d3413a63ce513d62554a5a2646c87f12623cf4aa590f1f4517492f49fa629a",
       "app/llm/opencode_provider.py": "e35ac4198bbe628aa17b990fa7bff24f6cfda1515d0a68fa3f48edb2840c3f48",
@@ -349,6 +349,6 @@
       "scripts/experiments/run.py": "f31d4d603e2003ce1b6ea56699ed95e7e64df4e7bd18c6d8d75f7120a90c7a26",
       "scripts/experiments/validation.py": "ae63b2832e0b3b3c24ee0715189efa9dfd3eb4386428ff97dcf617ed3ad2e972"
     },
-    "root_hash": "6a05397d1f5b1e62f7031edb4e9837c6db82f15c739a525437995e1007ec26b5"
+    "root_hash": "cf4bee69d9678283fc695cf1706304c69c5e5757e5b3bd4d0821ec99ba9be945"
   }
 }

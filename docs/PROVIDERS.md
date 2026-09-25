@@ -61,10 +61,16 @@ collapse them.
 3. the provider reported a *different* id than requested, meaning it rewrites
    ids and neither value identifies the backing model.
 
-Case 3 is not hypothetical. The development gateway was observed answering a
-request for `oc/big-pickle` with `"model": "big-pickle"`, and advertising 111
-models of which none completed a request. An unverifiable identity blocks the
-lock by design.
+Case 3 is not hypothetical. The development gateway was observed answering
+a request for `oc/big-pickle` with `"model": "big-pickle"`, while advertising
+111 models of which none completed a request. To be precise about what that
+does and does not show: **the request identifies the served model as
+`big-pickle`, and OpenCode publicly lists `big-pickle` as an OpenCode Zen
+model. The gateway provides no independent evidence of the backing model
+behind that route.** That is a statement about identifiability, not an
+accusation that the model is anything other than what the provider
+advertises — and it is why the run is blocked from locking rather than
+silently accepted.
 
 ## Registering the adapter
 

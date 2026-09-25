@@ -59,10 +59,11 @@ class ProviderIdentity:
         Three ways this is false, all of them observed in practice:
           - nothing was reported (we only know what we asked for);
           - what was reported is a transport name, not a model;
-          - the provider answered with a DIFFERENT id, which means it rewrites
-            ids. A gateway that maps `oc/big-pickle` to `big-pickle` is
-            telling us it does not expose a stable backing-model identity, so
-            neither value may be presented as one.
+          - the provider answered with a DIFFERENT id. That means it
+            normalises ids, so this response cannot evidence which backing
+            model served. It does NOT mean the model is something other than
+            what the provider publicly lists: it means the response is not
+            independent evidence of it.
         """
         reported = self.provider_reported_model
         if not reported or looks_like_transport_name(reported):
@@ -86,8 +87,11 @@ class ProviderIdentity:
             )
         return (
             f"provider reported {reported!r} for a request of "
-            f"{self.requested_model!r}: the gateway rewrites model ids, so the "
-            "backing model is unverified"
+            f"{self.requested_model!r}: the gateway normalises model ids, so "
+            "the backing model behind this route is not independently "
+            "evidenced by the provider. It may well be the model that provider "
+            "publicly lists under that id; WIENER simply cannot confirm it "
+            "from this response."
         )
 
     @property

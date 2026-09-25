@@ -121,7 +121,11 @@ moving UAR, which is exactly why both are reported.
   the lock. An unverified model identity is not shipped with a caveat.
   This is not hypothetical: the development gateway was observed answering
   `oc/big-pickle` with `"model": "big-pickle"`, and advertising 111 models of
-  which none completed a request.
+  which none completed a request. To be precise: the request identifies the
+  served model as `big-pickle`, and OpenCode publicly lists `big-pickle` as an
+  OpenCode Zen model. The gateway gives no independent evidence of the backing
+  model behind that route, which is why the run is blocked from locking rather
+  than accepted with a caveat.
 - **Not a determinism claim.** The archived run records no decoding
   temperature in any row, and 90 of 135 rows record a transport name
   (`opencode`) in the `model` field rather than a model id. The current

@@ -16,12 +16,14 @@ Goal: stable demo, minimal latency variance, no surprise processes.
       the demo still works — it will ride the local Qwen rung (keep it warm,
       see step 2). Never block the demo on the cloud.
 - [ ] Cloud pre-flight GAGAL → **jangan menunda demo.** Ladder turun otomatis
-      `opencode → local → replay`: Qwen hangat tetap jalan (langkah 2), replay
+      `cloud → local Ollama → replay`: Qwen hangat tetap jalan (langkah 2), replay
       deterministik tetap bisa menampilkan hasil instan. Semua langkah 1–3
       tetap berjalan tanpa cloud.
 - [ ] Close every non-essential browser tab. The dashboard is served locally;
       one tab is enough. (Large open tab counts measurably hurt an i5's
       shared caches.)
+- [ ] Ollama is already running in a separate terminal. If it is not, start
+      `ollama serve` there and keep it running while preparing the demo.
 - [ ] Stop duplicate model/LLM processes. Exactly **one** `ollama serve` may run:
       ```bash
       pgrep -a ollama          # expect 1 serve (+ its runner children)
@@ -68,18 +70,22 @@ ikut gagal.
 | replay mode | none | <1 ms |
 
 If a cloud call stalls near the timeout, the ladder fails **downward only**
-(opencode → local → replay); the UI shows the actual rung (`REPLAY MODE`,
+(cloud → local Ollama → replay); the UI shows the actual rung (`REPLAY MODE`,
 `not live inference`), so the audience always sees a truthful label and the
 deterministic replay artifact renders instantly.
 
 ## 5. START / STOP
 
 ```bash
-# terminal 1 (server)
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-# terminal 2 (dashboard / judge demo)
+# terminal 1: live cloud demo
+WIENER_LLM_FORCE=opencode uvicorn app.main:app --host 0.0.0.0 --port 8000
+# terminal 2: dashboard / judge demo
 #  ... one browser tab to http://localhost:8000
 ```
+
+Use `WIENER_LLM_FORCE=local` for a local-only demo, or
+`WIENER_LLM_FORCE=replay` for the deterministic safety-net demo. The copied
+`.env` defaults to replay, so live mode must be selected explicitly.
 
 - Use `Ctrl+C` on the server for a clean shutdown; keep the single `ollama serve`
   running if more scenarios follow, stop it after the demo to free RAM.

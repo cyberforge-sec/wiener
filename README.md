@@ -53,7 +53,25 @@ release/      Release notes
 
 No portable RAM or disk minimum is claimed because this repository has no validated cross-host measurement.
 
+### Choose a run mode
+
+The repository does not include your API key or local model. Choose one mode:
+
+| Goal | What you provide | `WIENER_LLM_FORCE` |
+| --- | --- | --- |
+| Offline evaluation | Nothing beyond the application | `replay` |
+| Live cloud inference | Your own OpenAI-compatible key, base URL, and model | `opencode` |
+| Live local inference | Ollama and a model installed on the same machine | `local` |
+| Automatic selection | Optional cloud and/or local configuration | empty |
+
+`opencode` is the legacy internal name for the cloud adapter; the UI labels it
+**Cloud (OpenAI-compatible)**. The checked-in `.env.example` is safe: its cloud
+key is empty and its default is `replay`.
+
 ## 6. Quick Start
+
+The first run is intentionally offline and deterministic. It uses no API key,
+no Ollama, and no network call:
 
 ```bash
 git clone https://github.com/cyberforge-sec/wiener.git
@@ -62,11 +80,18 @@ python3 -m venv .venv
 . .venv/bin/activate                 # Windows PowerShell: .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 cp .env.example .env
-./run_replay --scenario ALL
-python -m app.main
+WIENER_LLM_FORCE=replay ./run_healthcheck
+WIENER_LLM_FORCE=replay ./run_replay --scenario ALL
+WIENER_LLM_FORCE=replay python -m app.main
 ```
 
-Open `http://localhost:8000/judge`. The replay command needs no credentials or local model. Stop the server with `Ctrl+C`.
+Open `http://localhost:8000/judge`, leave the provider set to **Replay**, and
+run a scenario. Stop the server with `Ctrl+C`. The copied `.env` is safe: its
+cloud key is empty and its provider default is `replay`.
+
+To use a live model, edit `.env` using the Cloud or Local section below. To
+restore automatic selection, set `WIENER_LLM_FORCE=` after configuring the
+provider you want to try first; the ladder is cloud → local Ollama → replay.
 
 ## 7. Run Without Docker
 
@@ -77,7 +102,7 @@ python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r requirements.txt
 cp .env.example .env
-./run_healthcheck
+WIENER_LLM_FORCE=replay ./run_healthcheck
 WIENER_LLM_FORCE=replay python -m app.main
 ```
 
@@ -87,24 +112,44 @@ In another terminal, verify `curl http://localhost:8000/health` and run:
 curl -X POST http://localhost:8000/judge/run -H 'content-type: application/json' -d '{"provider":"replay","scenario":"normal"}'
 ```
 
-The health response should be `ok`; the Judge response identifies `replay`. Remove `WIENER_LLM_FORCE` to restore automatic cloud → local → replay selection.
+The health response should be `ok`; the Judge response identifies `replay`. To
+restore automatic cloud → local Ollama → replay selection, set
+`WIENER_LLM_FORCE=` in `.env` and restart the server. Do not merely remove a
+shell override while `.env` still contains `WIENER_LLM_FORCE=replay`.
 
 ## 8. Run With Docker
+
+Build once, then choose exactly one runtime mode:
 
 ```bash
 docker build -t wiener:local .
 docker run --rm -p 8000:8000 -e WIENER_LLM_FORCE=replay wiener:local
 ```
 
-Visit `http://localhost:8000/judge` or call `/health`. The image has a Docker health check; inspect it with `docker inspect --format '{{.State.Health.Status}}' <container-id>`. Use `docker logs <container-id>`, `docker stop <container-id>`, and a new `docker run` command to view logs, stop, and restart. If port 8000 is busy, use `-p 8001:8000`.
+The command above is the safest first run. Visit `http://localhost:8000/judge`
+or call `/health` in another terminal. If port 8000 is busy, use `-p 8001:8000`.
 
-For cloud mode, keep credentials in a local `.env` and pass it explicitly:
+For a named background container with an inspectable health status:
 
 ```bash
-docker run --rm -p 8000:8000 --env-file .env wiener:local
+docker run -d --name wiener-demo -p 8000:8000 -e WIENER_LLM_FORCE=replay wiener:local
+docker inspect --format '{{.State.Health.Status}}' wiener-demo
+docker logs -f wiener-demo
+docker stop wiener-demo
+docker rm wiener-demo
 ```
 
-Never bake `.env`, keys, or models into the image; `.dockerignore` excludes secrets, logs, and cache.
+For cloud mode, put the evaluator's real credentials in `.env` and explicitly
+select the cloud adapter:
+
+```bash
+docker run --rm -p 8000:8000 --env-file .env -e WIENER_LLM_FORCE=opencode wiener:local
+```
+
+For local Ollama in Docker, use the host gateway command in section 10. If a
+cloud run fails inside Docker, the local fallback also needs that host gateway;
+otherwise WIENER falls through to replay. Never bake `.env`, keys, or models
+into the image; `.dockerignore` excludes secrets, logs, and cache.
 
 ## 9. Cloud LLM Setup
 
@@ -112,17 +157,22 @@ The cloud adapter uses an OpenAI-compatible chat-completions API. **OpenCode
 is not required.** Use direct OpenAI credentials or any provider/gateway that
 implements compatible `chat/completions`. The documented variables are
 `WIENER_CLOUD_*`; legacy `WIENER_OPENCODE_*` variables remain accepted only
-for backwards compatibility. Copy
-`.env.example` to `.env` and insert credentials belonging to the evaluator:
+for backwards compatibility. Copy `.env.example` to `.env`, then replace the
+cloud key and, if needed, the URL/model with values belonging to the evaluator:
 
 ```env
-WIENER_CLOUD_API_KEY=your_api_key_here
-WIENER_CLOUD_BASE_URL=https://your-provider.example/v1
-WIENER_CLOUD_MODEL=your_supported_model
+# Leave blank until you have a real key. Do not use a placeholder value.
+WIENER_CLOUD_API_KEY=
+WIENER_CLOUD_BASE_URL=https://api.openai.com/v1
+WIENER_CLOUD_MODEL=gpt-4o-mini
+WIENER_LLM_FORCE=opencode
 WIENER_LLM_TIMEOUT_S=30
 ```
 
-`WIENER_CLOUD_TEMPERATURE` and `WIENER_CLOUD_RESPONSE_FORMAT` are optional. An empty key skips cloud; an unavailable cloud tier falls to local then replay. Do not commit `.env`.
+Replace the URL and model with values from your own OpenAI-compatible provider.
+`WIENER_CLOUD_TEMPERATURE` and `WIENER_CLOUD_RESPONSE_FORMAT` are optional. An
+empty key skips cloud; an unavailable cloud tier falls to local then replay.
+Do not commit `.env`.
 
 ### Updating an existing setup
 
@@ -144,7 +194,7 @@ same local `.env`:
 
 ```bash
 docker build -t wiener:local .
-docker run --rm -p 8000:8000 --env-file .env wiener:local
+docker run --rm -p 8000:8000 --env-file .env -e WIENER_LLM_FORCE=opencode wiener:local
 ```
 
 The old names remain accepted for backward compatibility, so this migration is
@@ -164,16 +214,36 @@ The local provider currently calls the Ollama HTTP API (`/api/generate`), so
 or replay mode. For a native local run, install/start Ollama and pull the
 selected model:
 
+Use two terminals so the blocking server command does not hide the setup steps:
+
 ```bash
+# Terminal 1: start Ollama and leave it running
 ollama serve
+
+# Terminal 2: pull once, then verify
 ollama pull qwen2.5:1.5b
 curl http://localhost:11434/api/tags
 ```
 
-Configure `WIENER_LOCAL_HOST`, `WIENER_LOCAL_MODEL`, `WIENER_LOCAL_TIMEOUT_S`, `WIENER_LOCAL_MAX_TOKENS`, and `WIENER_LOCAL_KEEP_ALIVE`. Docker Desktop should use `http://host.docker.internal:11434`; on Linux add the host gateway mapping:
+Configure `WIENER_LOCAL_HOST`, `WIENER_LOCAL_MODEL`, `WIENER_LOCAL_TIMEOUT_S`,
+`WIENER_LOCAL_MAX_TOKENS`, and `WIENER_LOCAL_KEEP_ALIVE`. For a native local
+run, put these values in `.env`:
+
+```env
+WIENER_LLM_FORCE=local
+WIENER_LOCAL_HOST=http://localhost:11434
+WIENER_LOCAL_MODEL=qwen2.5:1.5b
+WIENER_LOCAL_TIMEOUT_S=60
+WIENER_LOCAL_MAX_TOKENS=128
+WIENER_LOCAL_KEEP_ALIVE=5m
+```
+
+`WIENER_LOCAL_HOST` is the Ollama HTTP endpoint; `WIENER_LOCAL_MODEL` is the
+model tag returned by `ollama pull`. For Docker Desktop, use
+`http://host.docker.internal:11434`; on Linux also add the host gateway:
 
 ```bash
-docker run --rm -p 8000:8000 --add-host=host.docker.internal:host-gateway -e WIENER_LOCAL_HOST=http://host.docker.internal:11434 -e WIENER_LOCAL_MODEL=qwen2.5:1.5b wiener:local
+docker run --rm -p 8000:8000 --add-host=host.docker.internal:host-gateway -e WIENER_LLM_FORCE=local -e WIENER_LOCAL_HOST=http://host.docker.internal:11434 -e WIENER_LOCAL_MODEL=qwen2.5:1.5b wiener:local
 ```
 
 `localhost` inside a container means the container itself, not host Ollama.
@@ -196,15 +266,19 @@ Replay uses the recorded response store and makes no cloud or Ollama request:
 ./run_replay --scenario ALL --validate --runs 3
 ```
 
-It is deterministic/offline verification, not live LLM inference. Generated replay run files are intentionally ignored by Git.
+It is deterministic/offline verification, not live LLM inference. Generated
+replay run files are intentionally ignored by Git. This is the recommended
+mode for an evaluator who does not have an API key or Ollama.
 
 ## 12. Judge Mode
 
-Start the server and open `/judge`. Choose **Cloud** (internal API value:
-`opencode`), **Local (Ollama)**, or `replay`; choose `normal`,
-`prompt_injection`, or `adaptive`; then select **Run**. **Replay** repeats the
-latest request and **Reset** clears state. Evaluators should inspect the actual
-provider tier, pipeline stages, policy verdict, and simulated-tool result.
+Start the server and open `/judge`. For a first evaluation choose **Replay**.
+For live inference choose **Cloud** (legacy internal API value: `opencode`) or
+**Local (Ollama)**; these are alternatives, not two models that must run
+together. Choose `normal`, `prompt_injection`, or `adaptive`, then select
+**Run**. **Replay** repeats the latest request and **Reset** clears state.
+Evaluators should inspect the actual provider tier, pipeline stages, policy
+verdict, and simulated-tool result.
 
 ## 13. API / Endpoints
 
@@ -225,8 +299,8 @@ provider tier, pipeline stages, policy verdict, and simulated-tool result.
 
 ```bash
 python -m pytest -q
-./run_healthcheck
-./run_replay --scenario ALL --validate --runs 3
+WIENER_LLM_FORCE=replay ./run_healthcheck
+WIENER_LLM_FORCE=replay ./run_replay --scenario ALL --validate --runs 3
 ```
 
 The health check reports unavailable cloud/Ollama as warnings because replay is a supported fallback.
@@ -249,6 +323,7 @@ The health check reports unavailable cloud/Ollama as warnings because replay is 
 | Ollama unavailable | Service stopped or bad host. | Run `ollama serve`, verify `/api/tags`, set `WIENER_LOCAL_HOST`. |
 | Model not found | Configured tag was not pulled. | Run `ollama pull <model>`. |
 | Cloud key missing | Key is blank. | Add evaluator key to local `.env`, or use local/replay. |
+| First run unexpectedly calls cloud | A placeholder or copied key is present and replay is not selected. | Set `WIENER_CLOUD_API_KEY=` and `WIENER_LLM_FORCE=replay`. |
 | Invalid cloud URL | Provider API root is incorrect. | Set its OpenAI-compatible base URL, normally ending `/v1`. |
 | Container cannot reach Ollama | Container localhost differs from host localhost. | Use `host.docker.internal:11434`; Linux also needs `--add-host=host.docker.internal:host-gateway`. |
 | Dependency install fails | Unsupported Python or unavailable package index. | Use Python 3.10+, recreate venv, restore package-index access. |

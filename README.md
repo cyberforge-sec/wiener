@@ -438,15 +438,42 @@ See [architecture](docs/architecture.md), [provider adapters](docs/PROVIDERS.md)
 
 ## 19. Evidence and Experiments
 
-Three different things live in `data/experiments/`, and they are not
-interchangeable. Confusing them is the fastest way to make an honest number
-look dishonest.
+The repository tracks three reference experiment sets in `data/experiments/`.
+Local development may additionally contain gitignored candidate and preflight
+artifacts, documented in [the route survey](docs/PROVIDER_SURVEY.md). These are
+not interchangeable, and confusing them is the fastest way to make an honest
+number look dishonest.
 
 | Directory | What it is | Status |
 | --- | --- | --- |
 | `authoritative_20260925_zero_degraded` | The 135-trial benchmark: 45 trials x 3 modes, live provider, locked artifacts. The source of the dashboard headline numbers. | Historical. Its `model` field records a transport name on 90 of 135 rows and no trial recorded its decoding temperature, so it does **not** satisfy the current validation checklist. Kept unmodified. |
 | `authoritative_20260912_clean_2252` | The earlier 10-trial run. | Historical only. Its anomaly was not reproduced. |
 | `enforcement_ablation_reference` | A separate experiment answering "is safety from the prompt or from the gate?" | Current, deterministic, offline. |
+
+### Current evidence status
+
+**The repository does not currently contain a `LOCKED_VERIFIED` authoritative
+cloud benchmark.**
+
+The latest cloud evaluation using OpenCode / Big Pickle produced a 135-trial
+`CANDIDATE` bundle (17 of 18 invariants) because the gateway did not provide a
+pinned, independently verifiable model identity for the route serving the
+benchmark payload. It is preserved as supplementary evidence and is not
+presented as verified.
+
+A separate preflight artifact records the same identity gate blocking that route
+**before any trial was spent** — the run reached the live provider, served the
+benchmark payload and returned valid JSON on every probe, and was refused
+anyway, purely on model-identity quality.
+
+These candidate artifacts are machine-local and gitignored. They are documented
+in [docs/PROVIDER_SURVEY.md](docs/PROVIDER_SURVEY.md), which records the
+per-route measurements, and they are not counted as benchmark evidence.
+
+Nothing in this repository should be read as a claim that an authoritative
+cloud benchmark has been verified. What *is* verified is the enforcement
+claim, and it does not depend on which provider ran: see
+`enforcement_ablation_reference`.
 
 Regenerate the ablation (one command, no credentials, ~1 second):
 

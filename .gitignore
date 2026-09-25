@@ -36,6 +36,8 @@ data/experiments/authoritative_20260912_clean_2252/*
 !data/experiments/authoritative_20260912_clean_2252/trials.jsonl
 !data/experiments/authoritative_20260912_clean_2252/evidence_manifest.json
 !data/experiments/authoritative_20260912_clean_2252/code_fingerprint.json
+!data/experiments/authoritative_20260912_clean_2252/experiment_config.json
+!data/experiments/authoritative_20260912_clean_2252/seed_manifest.json
 
 # Internal working notes and superseded local checksum manifest
 SUMMARY.md

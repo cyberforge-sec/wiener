@@ -18,9 +18,14 @@ python -m pytest -q
 docker build -t wiener:local .
 ```
 
-The historical `release/MANIFEST.sha256` is not part of the public submission:
-it was a local snapshot checksum and is deliberately excluded so it cannot
-make stale byte-for-byte claims after repository preparation.
+## Evidence provenance
+
+The authoritative metrics are preserved from the recorded 135-trial run. The
+manifest's `source_provenance` field compares the recorded code fingerprint
+with the current source tree. It currently reports `STALE` because the run was
+recorded before the current `main` source changes. This is intentional and
+visible in the dashboard; the stored metrics are not presented as a
+current-code run. A current-code lock requires rerunning the experiment.
 
 ## Change policy
 

@@ -62,6 +62,43 @@ def code_fingerprint() -> dict:
     }
 
 
+def fingerprint_status(stored: dict | None) -> dict:
+    """Compare a stored code fingerprint with the current source tree."""
+    stored = stored or {}
+    current = code_fingerprint()
+    stored_files = set(stored.get("files") or [])
+    current_files = set(current["files"])
+    stored_hashes = stored.get("file_hashes") or {}
+    current_hashes = current["file_hashes"]
+    mismatched = sorted(
+        path
+        for path in stored_files | current_files
+        if stored_hashes.get(path) != current_hashes.get(path)
+    )
+    added = sorted(current_files - stored_files)
+    removed = sorted(stored_files - current_files)
+    match = (
+        stored.get("root_hash") == current["root_hash"]
+        and stored.get("count") == current["count"]
+        and not mismatched
+    )
+    return {
+        "status": "MATCH" if match else "STALE",
+        "recorded_root_hash": stored.get("root_hash"),
+        "current_root_hash": current["root_hash"],
+        "recorded_file_count": stored.get("count"),
+        "current_file_count": current["count"],
+        "mismatched_files": mismatched,
+        "added_files": added,
+        "removed_files": removed,
+        "note": (
+            "Fingerprint matches the current source tree."
+            if match
+            else "Recorded metrics predate the current source tree; rerun the experiment for a current-code lock."
+        ),
+    }
+
+
 def write_code_fingerprint(out_dir: Path) -> dict:
     payload = code_fingerprint()
     (out_dir / "code_fingerprint.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -232,6 +269,7 @@ def write_evidence_manifest(out_dir: Path) -> dict:
             "provenance_status": "ISSUES",
             "provenance_issues": ["no trials.jsonl store"],
             "recompute_diffs": ["no store to recompute"],
+            "source_provenance": fingerprint_status(fp),
             "code_fingerprint": {"root_hash": fp.get("root_hash"), "count": fp.get("count"), "method": fp.get("method")},
             "artifact_hashes": {
                 "trials.jsonl": None,
@@ -326,6 +364,7 @@ def write_evidence_manifest(out_dir: Path) -> dict:
         "provenance_status": prov_status,
         "provenance_issues": prov_issues,
         "recompute_diffs": diffs if not metrics_match else [],
+        "source_provenance": fingerprint_status(fp),
         "code_fingerprint": {"root_hash": fp.get("root_hash"), "count": fp.get("count"), "method": fp.get("method")},
         "artifact_hashes": artifact_hashes,
         "gates": gates,

@@ -31,6 +31,10 @@ WIENER_CLOUD_BASE_URL=https://your-provider.example/v1
 WIENER_CLOUD_MODEL=your_supported_model
 ```
 
+For an existing `.env`, rename every `WIENER_OPENCODE_*` variable to its
+matching `WIENER_CLOUD_*` name, then restart the native server or rebuild and
+restart the Docker image. The old names still work as compatibility fallbacks.
+
 Ollama is optional for the overall application, but it is required when using
 the built-in local provider because that provider calls Ollama's
 `/api/generate` API. Start it, pull a selected model, and configure

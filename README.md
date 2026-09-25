@@ -124,6 +124,32 @@ WIENER_LLM_TIMEOUT_S=30
 
 `WIENER_CLOUD_TEMPERATURE` and `WIENER_CLOUD_RESPONSE_FORMAT` are optional. An empty key skips cloud; an unavailable cloud tier falls to local then replay. Do not commit `.env`.
 
+### Updating an existing setup
+
+If you already have a local `.env` from an earlier WIENER checkout, rename
+these variables. Your API key value, URL, and model value do not change.
+
+| Old variable | New variable |
+| --- | --- |
+| `WIENER_OPENCODE_API_KEY` | `WIENER_CLOUD_API_KEY` |
+| `WIENER_OPENCODE_BASE_URL` | `WIENER_CLOUD_BASE_URL` |
+| `WIENER_OPENCODE_MODEL` | `WIENER_CLOUD_MODEL` |
+| `WIENER_OPENCODE_TEMPERATURE` | `WIENER_CLOUD_TEMPERATURE` |
+| `WIENER_OPENCODE_RESPONSE_FORMAT` | `WIENER_CLOUD_RESPONSE_FORMAT` |
+| `WIENER_OPENCODE_DIAG_PATH` | `WIENER_CLOUD_DIAG_PATH` |
+
+Then restart the application. For a native run, stop it with `Ctrl+C` and run
+`python -m app.main` again. For Docker, rebuild the image and run it with the
+same local `.env`:
+
+```bash
+docker build -t wiener:local .
+docker run --rm -p 8000:8000 --env-file .env wiener:local
+```
+
+The old names remain accepted for backward compatibility, so this migration is
+recommended for clarity, not an emergency breaking change.
+
 | Cloud choice | Works now? | Notes |
 | --- | --- | --- |
 | OpenAI API | Yes | Configure its standard `/v1` base URL, key, and model. |

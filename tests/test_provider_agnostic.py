@@ -21,27 +21,27 @@ def test_identity_separates_the_four_concepts():
     identity = ProviderIdentity(
         provider="opencode",
         adapter="openai_compatible",
-        requested_model="oc/big-pickle",
-        provider_reported_model="big-pickle",
+        requested_model="gpt-4o-mini",
+        provider_reported_model="gpt-4o-mini",
         temperature=0.0,
         deterministic_requested=True,
     )
     assert identity.provider == "opencode"
     assert identity.adapter == "openai_compatible"
-    assert identity.requested_model == "oc/big-pickle"
-    assert identity.provider_reported_model == "big-pickle"
+    assert identity.requested_model == "gpt-4o-mini"
+    assert identity.provider_reported_model == "gpt-4o-mini"
     assert identity.model_identity_reliable is True
 
     payload = identity.as_meta()
     assert payload["provider"] == "opencode"
     assert payload["adapter"] == "openai_compatible"
-    assert payload["requested_model"] == "oc/big-pickle"
-    assert payload["provider_reported_model"] == "big-pickle"
+    assert payload["requested_model"] == "gpt-4o-mini"
+    assert payload["provider_reported_model"] == "gpt-4o-mini"
     assert payload["temperature"] == 0.0
     assert payload["deterministic_requested"] is True
     # The legacy convenience key stays, but it must equal the REQUESTED model,
     # never the adapter name. I-13b rejects transport names.
-    assert payload["model"] == "oc/big-pickle"
+    assert payload["model"] == "gpt-4o-mini"
     assert payload["model"] != identity.adapter
 
 
@@ -481,3 +481,42 @@ def test_unknown_cloud_adapter_is_a_clear_configuration_error():
         assert "WIENER_CLOUD_ADAPTER" in str(ei.value)
     finally:
         factory.config = saved
+
+
+def test_rewritten_model_id_makes_identity_unreliable():
+    """A gateway that answers with a DIFFERENT id than we asked for is
+    rewriting ids, so neither id can be trusted as the backing model.
+
+    Observed on the development gateway: requested `oc/big-pickle`, response
+    `model: "big-pickle"`. Recording that as a reliable identity would assert
+    a model we cannot verify.
+    """
+    from app.llm.identity import ProviderIdentity
+
+    identity = ProviderIdentity(
+        provider="opencode",
+        adapter="openai_compatible",
+        requested_model="oc/big-pickle",
+        provider_reported_model="big-pickle",
+    )
+    assert identity.model_identity_reliable is False
+    note = identity.model_identity_note
+    assert "oc/big-pickle" in note and "big-pickle" in note
+    payload = identity.as_meta()
+    assert payload["model_identity_reliable"] is False
+    # Both ids are still recorded: the mismatch is the evidence.
+    assert payload["requested_model"] == "oc/big-pickle"
+    assert payload["provider_reported_model"] == "big-pickle"
+
+
+def test_matching_ids_stay_reliable():
+    from app.llm.identity import ProviderIdentity
+
+    identity = ProviderIdentity(
+        provider="ollama",
+        adapter="ollama",
+        requested_model="qwen2.5:1.5b",
+        provider_reported_model="qwen2.5:1.5b",
+    )
+    assert identity.model_identity_reliable is True
+    assert identity.model_identity_note is None

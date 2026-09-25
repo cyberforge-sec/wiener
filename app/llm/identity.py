@@ -54,22 +54,40 @@ class ProviderIdentity:
 
     @property
     def model_identity_reliable(self) -> bool:
-        return bool(self.provider_reported_model) and not looks_like_transport_name(
-            self.provider_reported_model
-        )
+        """True only when the provider named the same model we asked for.
+
+        Three ways this is false, all of them observed in practice:
+          - nothing was reported (we only know what we asked for);
+          - what was reported is a transport name, not a model;
+          - the provider answered with a DIFFERENT id, which means it rewrites
+            ids. A gateway that maps `oc/big-pickle` to `big-pickle` is
+            telling us it does not expose a stable backing-model identity, so
+            neither value may be presented as one.
+        """
+        reported = self.provider_reported_model
+        if not reported or looks_like_transport_name(reported):
+            return False
+        return reported == self.requested_model
 
     @property
     def model_identity_note(self) -> str | None:
         if self.model_identity_reliable:
             return None
-        if not self.provider_reported_model:
+        reported = self.provider_reported_model
+        if not reported:
             return (
                 "provider did not report which model served; only the requested "
                 "id is recorded, so the backing model is unverified"
             )
+        if looks_like_transport_name(reported):
+            return (
+                f"provider reported {reported!r}, which is a transport name "
+                "rather than a model id; identity is unverified"
+            )
         return (
-            f"provider reported {self.provider_reported_model!r}, which is a "
-            "transport name rather than a model id; identity is unverified"
+            f"provider reported {reported!r} for a request of "
+            f"{self.requested_model!r}: the gateway rewrites model ids, so the "
+            "backing model is unverified"
         )
 
     @property

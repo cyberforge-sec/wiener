@@ -204,9 +204,9 @@ def run_validation(records: list[TrialRecord], experiment_id: str) -> dict:
         v13["detail"] += f" ({unchecked} trial(s) produced no action to check)"
         _add_skipped(v13, f"{unchecked} trial(s) produced no action to check")
 
-    # I-13b Model identity: the recorded model must be a model, not a transport
-    # name. Provider adapters report their own transport name, which
-    # is not evidence of which model answered.
+    # I-13b Model identity: the recorded model must be a verifiable model id,
+    # not a transport name and not a rewritten alias. Provider adapters report
+    # their own transport name, which is not evidence of which model answered.
     v13b = _invariant("I-13b", "model-identity-recorded", "")
     # Kept in step with app.llm.identity.TRANSPORT_NAMES so the evidence layer
     # and the provider layer agree on what counts as a transport name.
@@ -214,20 +214,39 @@ def run_validation(records: list[TrialRecord], experiment_id: str) -> dict:
 
     transport_names = set(TRANSPORT_NAMES)
     wrong_model = 0
+    unverifiable = 0
     for r in records:
         if r.fallback_used or r.error:
             continue
         if not r.model:
             _add_violation(v13b, f"trial {r.trial_id} {r.mode}: model not recorded")
-        elif r.model.lower() in transport_names:
+            continue
+        if r.model.lower() in transport_names:
             wrong_model += 1
             _add_violation(
                 v13b,
                 f"trial {r.trial_id} {r.mode}: model={r.model!r} is a transport name, not a model id",
             )
-    v13b["detail"] = "every live trial records the model id its provider reported"
+            continue
+        # A provider that answers with a DIFFERENT id than we requested is
+        # rewriting ids, so neither value identifies the backing model. That is
+        # recorded rather than locked: an unverifiable model identity must
+        # fail the evidence, not ship with a caveat.
+        meta = r.provider_meta or {}
+        if meta.get("model_identity_reliable") is False:
+            unverifiable += 1
+            _add_violation(
+                v13b,
+                f"trial {r.trial_id} {r.mode}: model identity unverifiable "
+                f"(requested={meta.get('requested_model')!r}, "
+                f"reported={meta.get('provider_reported_model')!r}); "
+                f"reason: {meta.get('model_identity_note')}",
+            )
+    v13b["detail"] = "every live trial records a verifiable model id its provider confirmed"
     if wrong_model:
         v13b["detail"] += f" ({wrong_model} recorded a transport name instead)"
+    if unverifiable:
+        v13b["detail"] += f" ({unverifiable} recorded an unverifiable model identity)"
 
     # I-14  Degraded trials must declare fallback_used=True and a reason.
     v14 = _invariant("I-14", "degraded-declared", "")

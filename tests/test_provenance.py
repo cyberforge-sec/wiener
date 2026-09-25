@@ -337,3 +337,47 @@ def test_archived_evidence_is_stale_under_the_wider_fingerprint():
         "config/red_ai_seeds.yaml",
         "config/safety_constraints.yaml",
     } <= added
+
+
+def test_rewritten_model_id_fails_evidence_validation():
+    """A gateway that answers with a different id than requested is rewriting
+    ids, so the backing model is unverifiable. That must FAIL I-13b and
+    therefore block the lock, not ship with a caveat."""
+    from scripts.experiments.validation import run_validation
+
+    rec = _record(
+        model="oc/big-pickle",
+        provider_meta={
+            "temperature": 0.0,
+            "model": "oc/big-pickle",
+            "provider": "opencode",
+            "adapter": "openai_compatible",
+            "requested_model": "oc/big-pickle",
+            "provider_reported_model": "big-pickle",
+            "model_identity_reliable": False,
+            "model_identity_note": "the gateway rewrites model ids",
+        },
+    )
+    res = run_validation([rec], "e")
+    assert res["validation_status"] == "FAIL"
+    assert "I-13b" in res["failing_invariants"]
+    assert any("unverifiable" in v for v in res["invariants"]["I-13b"]["violations"])
+
+
+def test_confirmed_model_identity_passes():
+    from scripts.experiments.validation import run_validation
+
+    rec = _record(
+        model="qwen2.5:1.5b",
+        provider_meta={
+            "temperature": 0.2,
+            "model": "qwen2.5:1.5b",
+            "provider": "ollama",
+            "adapter": "ollama",
+            "requested_model": "qwen2.5:1.5b",
+            "provider_reported_model": "qwen2.5:1.5b",
+            "model_identity_reliable": True,
+        },
+    )
+    res = run_validation([rec], "e")
+    assert "I-13b" not in res["failing_invariants"]

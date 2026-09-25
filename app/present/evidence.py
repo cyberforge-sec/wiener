@@ -64,14 +64,25 @@ def experiments_root() -> Path:
 
 
 def authoritative_dir() -> Path:
-    """Resolve the primary evidence directory.
+    """Resolve the evidence directory the dashboard should present.
 
-    A run whose evidence_manifest.json says LOCKED_VERIFIED wins; otherwise the
-    legacy AUTHORITATIVE_ID is used so the dashboard keeps working pre-lock."""
-    from scripts.experiments.lock import locked_evidence_dir
+    Selection is by CURRENT defensibility, not by the `evidence_status` string
+    that was written when a run was locked. A bundle locked by an earlier
+    revision of the code is exactly the one a reader needs to be warned about,
+    so it must not win merely because it says LOCKED_VERIFIED on disk.
+
+    Order of preference:
+      1. the most defensible evidence currently available (which is a currently
+         locked artifact whenever one exists);
+      2. the legacy hardcoded id, so a fresh clone with no lock still renders.
+
+    Selection never promotes an artifact's status: a CANDIDATE bundle selected
+    here is still rendered as CANDIDATE.
+    """
+    from scripts.experiments.lock import best_available_evidence_dir
 
     return (
-        locked_evidence_dir(experiments_root())
+        best_available_evidence_dir(experiments_root())
         or experiments_root() / AUTHORITATIVE_ID
     )
 

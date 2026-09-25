@@ -99,6 +99,45 @@ Preflight now refuses to start a run whose model identity cannot be verified
 deliberate exception is `--allow-unverifiable-identity`, which records that the
 result can only be a `CANDIDATE`.
 
+## How the dashboard chooses which evidence to show
+
+Two selectors, deliberately separate, because a stored `evidence_status` is a
+record of what was true when a run was locked — not a statement about the tree
+being served now.
+
+| Function | Meaning |
+| --- | --- |
+| `locked_evidence_dir()` | only what is **currently** genuinely `LOCKED_VERIFIED`: stored lock **and** provenance still matching **and** validation still passing |
+| `best_available_evidence_dir()` | the most defensible artifact overall, by current state |
+
+The dashboard uses the second. Ranking, most significant first:
+
+1. readable / structurally valid
+2. current provenance against the serving tree (`match` > `unknown` > `stale`)
+3. currently locked
+4. validation still passing
+5. the `no_degraded_trials` integrity gate
+6. invariant pass count
+7. recency
+
+Two consequences worth stating plainly:
+
+- An older `LOCKED_VERIFIED` whose provenance has gone **stale** is exactly the
+  artifact a reader needs to be warned about, so it must not win merely because
+  it says `LOCKED_VERIFIED` on disk. A newer `CANDIDATE` whose provenance still
+  matches and whose invariant coverage is higher is the more defensible
+  evidence, and is selected instead.
+- A **currently** locked artifact still outranks a candidate. The rule is
+  "current defensibility outranks a historical status string", not "candidate
+  always wins".
+
+Selection never promotes status. A `CANDIDATE` bundle chosen this way is still
+rendered as `CANDIDATE`; only the numbers come from the more defensible
+artifact.
+
+`tests/test_evidence_selection.py` pins all of it, including the ordering in
+both directions and that an unreadable directory is never selected.
+
 ## What `provenance: MATCH` covers
 
 The fingerprint covers every `.py` file under `app/` and `scripts/experiments/`,

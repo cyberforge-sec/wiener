@@ -678,3 +678,38 @@ def test_api_judge_page_served():
     assert "text/html" in resp.headers["content-type"]
     assert "Judge Live Demo" in resp.text
     assert "id=\"btn-run\"" in resp.text
+
+
+def test_adaptive_panel_verdict_is_the_loops_own_last_verdict():
+    """The displayed verdict must be the loop's final iteration outcome, not a
+    separate re-run of the same attack (which could differ under sampling)."""
+    run = run_judge("replay", "adaptive", llm=None, slot=1)
+    assert run.error is None
+    assert run.adaptive_trace, "expected a recorded adaptive trace"
+    last_step = run.adaptive_trace[-1]
+    assert run.decision == last_step.decision
+    assert run.result is not None
+    assert run.result.decision.decision.value == last_step.decision
+
+
+def test_adaptive_run_does_not_double_inference(monkeypatch):
+    """One pipeline call per iteration: the panel reuses the loop's own result
+    instead of paying for (and displaying) a second run of the same attack."""
+    from app.judge import judge_mode
+
+    calls = []
+    real_pipeline = judge_mode.Pipeline
+
+    class CountingPipeline(real_pipeline):  # type: ignore[misc,valid-type]
+        def run(self, *a, **k):
+            calls.append(1)
+            return super().run(*a, **k)
+
+    monkeypatch.setattr(judge_mode, "Pipeline", CountingPipeline)
+
+    run = judge_mode.run_judge("replay", "adaptive", llm=None, slot=1)
+
+    assert run.error is None
+    assert run.adaptive_trace
+    # Exactly one pipeline invocation per recorded iteration, no trailing re-run.
+    assert len(calls) == len(run.adaptive_trace)

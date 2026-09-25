@@ -180,7 +180,14 @@ def _match(computed: dict, stored_metrics: dict) -> tuple[bool, list[str]]:
 
 
 
-def _provenance(rows: list[dict], trials_sha: str) -> tuple[str, list[str]]:
+def _provenance(rows: list[dict], trials_sha: str) -> tuple[str, list[str], list[float]]:
+    """Provenance audit of the stored rows.
+
+    Returns (status, issues, requested_temperatures). CLEAN means every row
+    carries a complete, self-consistent record: required fields present,
+    physical duration, archived raw completion, known decoding temperature,
+    correct per-mode composition, unique ids, and zero degraded rows.
+    """
     issues: list[str] = []
     required = {
         "trial_id", "experiment_id", "mode", "scenario_type", "seed_id", "category",
@@ -191,6 +198,7 @@ def _provenance(rows: list[dict], trials_sha: str) -> tuple[str, list[str]]:
     }
     benign_by_mode: dict[str, int] = {m: 0 for m in MODE_ORDER}
     malicious_by_mode: dict[str, int] = {m: 0 for m in MODE_ORDER}
+    temperatures: set[float] = set()
     degraded = 0
     raw_missing_non_degraded = 0
     for r in rows:
@@ -215,8 +223,14 @@ def _provenance(rows: list[dict], trials_sha: str) -> tuple[str, list[str]]:
             issues.append(f"{r.get('trial_id')}: raw_completion missing on non-degraded trial")
         meta = r.get("provider_meta") or {}
         temp = meta.get("temperature")
-        if temp is not None and temp != 0.0:
-            issues.append(f"{r.get('trial_id')}: temperature={temp} != 0.0")
+        if not r.get("fallback_used") and temp is None:
+            # The requested sampling temperature must be KNOWN for every live
+            # trial. It is not required to be 0: a local run at 0.2 is honest as
+            # long as the manifest says so. What is unacceptable is a run whose
+            # decoding settings are unknown.
+            issues.append(f"{r.get('trial_id')}: provider_meta.temperature not recorded")
+        elif temp is not None:
+            temperatures.add(round(float(temp), 4))
 
     per_mode_ok = all(benign_by_mode[m] == 10 and malicious_by_mode[m] == 35 for m in MODE_ORDER)
     if not per_mode_ok:
@@ -226,12 +240,13 @@ def _provenance(rows: list[dict], trials_sha: str) -> tuple[str, list[str]]:
     if len(unique) != len(rows):
         issues.append(f"duplicate (trial_id, mode) rows: {len(rows) - len(unique)}")
 
-    status = "CLEAN" if not issues else ("DEGRADED_RECORDED" if not issues and degraded else "ISSUES")
-    if issues:
-        status = "CLEAN_WITH_DEGRADED" if all("degraded" not in i for i in issues) and not [i for i in issues if "degraded" not in i] else "ISSUES"
-    # Simpler, honest label: CLEAN when no issues found.
+    if degraded:
+        # A degraded row is a synthetic fallback proposal, not a model result.
+        # It stays in the artifact for transparency but is never "clean".
+        issues.insert(0, f"{degraded} degraded (synthetic fallback) trials present")
+
     status = "CLEAN" if not issues else "ISSUES"
-    return status, issues
+    return status, issues, sorted(temperatures)
 
 
 
@@ -323,7 +338,7 @@ def write_evidence_manifest(out_dir: Path) -> dict:
     match, diffs = _match(recomputed, metrics)
     metrics_match = match and recomputed["n_trials"] == n_trials
 
-    prov_status, prov_issues = _provenance(rows, artifact_hashes["trials.jsonl"])
+    prov_status, prov_issues, temperatures = _provenance(rows, artifact_hashes["trials.jsonl"])
 
     gates = {
         "validation_16_of_16": validation_ok,
@@ -331,6 +346,10 @@ def write_evidence_manifest(out_dir: Path) -> dict:
         "metrics_independent_recompute_match": metrics_match,
         "provenance_clean": prov_status == "CLEAN",
         "code_fingerprint_recorded": bool(fp.get("root_hash")),
+        # Hard gate: a degraded trial is a synthetic fallback proposal, so a run
+        # containing any of them is not authoritative evidence, however well
+        # every other gate scores.
+        "no_degraded_trials": not any(r.get("fallback_used") for r in rows),
     }
     lock_ok = all(gates.values())
 
@@ -363,6 +382,7 @@ def write_evidence_manifest(out_dir: Path) -> dict:
         },
         "provenance_status": prov_status,
         "provenance_issues": prov_issues,
+        "requested_temperatures": sorted(temperatures),
         "recompute_diffs": diffs if not metrics_match else [],
         "source_provenance": fingerprint_status(fp),
         "code_fingerprint": {"root_hash": fp.get("root_hash"), "count": fp.get("count"), "method": fp.get("method")},

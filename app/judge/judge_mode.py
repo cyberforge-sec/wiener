@@ -467,10 +467,15 @@ def run_judge(
         # the moment it closes (BLOCK). SOC prompts stay unchanged (replay-safe).
         seen: list[AgentEvent] = []
         assessed: list[AdaptiveStep] = []
+        # Every iteration's REAL pipeline result, in order. The final one is the
+        # loop's actual outcome and is what the panel displays: a verdict must
+        # never come from a second, differently-seeded run of the same attack.
+        outcomes: list[PipelineResult] = []
 
         def _campaign_defense(ctx: SOCContext) -> PipelineResult:
             res = Pipeline(llm=active).run(ctx, history=tuple(seen))
             seen.append(ctx.events[0])
+            outcomes.append(res)
             return res
 
         loop = RedLoop(
@@ -480,6 +485,17 @@ def run_judge(
             stop_on_block=True,
         )
         report = loop.run(seed_id)
+
+        if report.error:
+            # Fail closed: a loop that stopped on provider failure or malformed
+            # feedback has no verdict. Showing a fresh single-shot run here
+            # would invent an outcome the loop never produced.
+            return _failed_run(
+                provider,
+                scenario,
+                f"adaptive loop stopped ({report.stopped_reason.value}): {report.error}",
+                run_id=run_id,
+            )
 
         for step in report.steps:
             assessed.append(
@@ -491,8 +507,23 @@ def run_judge(
                     reason_tags=tuple(step.feedback.reason_tags),
                 )
             )
-        final_attack = report.steps[-1].attack if report.steps else attack
-        result = pipeline.run(render_attack(final_attack), history=tuple(seen[:-1]))
+        if not report.steps or not outcomes:
+            return _failed_run(
+                provider,
+                scenario,
+                "adaptive loop produced no completed iteration",
+                run_id=run_id,
+            )
+        final_attack = report.steps[-1].attack
+        result = outcomes[-1]
+        # The displayed verdict must be the loop's own last verdict.
+        if result.decision.decision.value != report.steps[-1].feedback.decision.value:
+            return _failed_run(
+                provider,
+                scenario,
+                "adaptive loop verdict mismatch between trace and pipeline result",
+                run_id=run_id,
+            )
         return _new_run(
             provider,
             scenario,

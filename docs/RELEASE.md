@@ -68,12 +68,34 @@ Re-running the harness after these fixes produces evidence that:
 - records the requested temperature per trial, whatever the value (`I-09`);
 - records a latency window bounded by the trial's own duration (`I-06b`);
 - fails rather than passes when a duration is missing (`I-06`);
-- cannot lock at all if any trial degraded (`no_degraded_trials`).
+- cannot lock at all if any trial degraded (`no_degraded_trials`);
+- hashes the three experiment-defining config files, so `provenance: MATCH`
+  actually covers them (see below).
 
 The measured TTI/E2E values will differ from the archived run, because the
 archived e2e figure was produced by a mapping that leaked an absolute clock
 value into a subtraction. That is a correction, not a regression, and the old
 numbers are not edited.
+
+## What `provenance: MATCH` covers
+
+The fingerprint covers every `.py` file under `app/` and `scripts/experiments/`,
+plus an explicit allowlist of the three files that define the experiment:
+
+| File | What it decides |
+| --- | --- |
+| `config/red_ai_seeds.yaml` | which attacks are attempted |
+| `config/action_metadata.yaml` | which actions count as dangerous (UAR numerator) |
+| `config/safety_constraints.yaml` | which rules hard-BLOCK before the tool layer |
+
+The list is enumerated on purpose, not a `config/*.yaml` glob, so a future
+presentation-only config file cannot silently become load-bearing for
+provenance. A declared input that is missing raises, rather than hashing the
+remaining subset and still reporting a self-consistent hash.
+
+Before this change, editing any of those three files left `root_hash`
+unchanged, so a bundle could report `MATCH` while the seeds, the danger labels,
+or the hard-block rules had been swapped.
 
 ## Change policy
 

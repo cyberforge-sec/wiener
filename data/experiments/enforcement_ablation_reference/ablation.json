@@ -1,8 +1,8 @@
 {
   "experiment_id": "enforcement_ablation_reference",
   "experiment_type": "enforcement_ablation",
-  "completed_at": "2026-09-25T19:09:34.662665+00:00",
-  "created_at": "2026-09-26T02:09:34.662681+07:00",
+  "completed_at": "2026-09-25T19:38:28.637833+00:00",
+  "created_at": "2026-09-26T02:38:28.637847+07:00",
   "provider_requested": "replay",
   "proposal_source": "fixed catalog (deterministic, offline)",
   "scope": "Measures the enforcement layer only. Not comparable to, and never merged into, the authoritative 135-trial UAR/ASR/FIR/UAPR run.",
@@ -228,7 +228,7 @@
   },
   "code_fingerprint": {
     "method": "sha256 over sorted '<relpath>:<file_sha256>' lines; dbgit unavailable",
-    "count": 52,
+    "count": 55,
     "files": [
       "app/action_metadata.py",
       "app/api/routes.py",
@@ -274,6 +274,9 @@
       "app/risk_engine/risk_engine.py",
       "app/soc_agent/soc_agent.py",
       "app/tools/tool_executor.py",
+      "config/action_metadata.yaml",
+      "config/red_ai_seeds.yaml",
+      "config/safety_constraints.yaml",
       "scripts/experiments/common.py",
       "scripts/experiments/enforcement_ablation.py",
       "scripts/experiments/lock.py",
@@ -285,7 +288,7 @@
     ],
     "file_hashes": {
       "app/action_metadata.py": "9ae456ca489891e7c83c1cb4d56868014645f009f82bc363d8dbc4b0a01ee4cf",
-      "app/api/routes.py": "6694c3a9e4550626c7475843ea24a11ca1f9a14c125ca0364fbe281de31e6cf7",
+      "app/api/routes.py": "736deb56dd324b5ba68683155189dbee66497fa8c11e8163ab17fac1d1e62fee",
       "app/blue_ai/blue_ai.py": "7e1e5620bb521415f07a7aa36cf4feff74361a2c5c494a6aa2cd7e33a63f16d3",
       "app/blue_ai/feature_extraction.py": "a3cbd232f8e1e688684c8b6bb6ff9d02990d89b76affc109d426f09480b65e38",
       "app/blue_ai/metadata.py": "516b6f4e6a5a00cd3a62df0f829770d6072f35f5b174105f16141f4a4dc3ad2e",
@@ -297,7 +300,7 @@
       "app/experiment/runner.py": "a8fff8c5e1e5f84c8f5972eecd1fbdfff432a0d0282ba8bf93b91c5c1aa28b77",
       "app/judge/adaptive_pool.py": "1be7ff86c5d6f968c19795e90e1e4e5316cabf0a7d7dd3c4753e97188640493e",
       "app/judge/judge_mode.py": "bc08fb688ba1c9cd234d72d84467d8b0341a9fc99ac325c04dce52c6ef671a40",
-      "app/judge/render.py": "cbe8fe8ef6ccfb276abaf87eee70fd596f5724355ce6298fae96f437f98b07ad",
+      "app/judge/render.py": "8ab62813fd6981b1abfd2fb4a8df7b052a956ac6ef78d3c6bc5e431afebe1649",
       "app/judge/session.py": "809545b11c3a1b9ed4980a64668a149c2df517ec09a24b92b67acddffaf7a1e6",
       "app/judge/stream.py": "06f543b0a6438933b63f37ec1de16b13080bdb29e50869b498da489a6496a80d",
       "app/llm/base.py": "6cfebdd7e1f00ddf3381c7d1d599cd8104caad7f2c8e71b9c4c3983fb3276956",
@@ -328,15 +331,18 @@
       "app/risk_engine/risk_engine.py": "150e6b8ab719e186f21394d71bb8428554e18fb05e4ba419250fe12de931a459",
       "app/soc_agent/soc_agent.py": "fdb8a6618ab943db414ee47d7d3d19fde9a9a348521921289ba33925553ff839",
       "app/tools/tool_executor.py": "80a9a868a75b369500dfc4ab044805b8dba6f70cdd406e675360fbbf9d6bc6e7",
+      "config/action_metadata.yaml": "a51f7a3f8c72f5f91a4196e0d8f22bd521d18ee0ac4acc039c358a66e250667f",
+      "config/red_ai_seeds.yaml": "458260f8ae241256596d9ffd3377fb52b3310e534fcc8a1fadd16567b30c2501",
+      "config/safety_constraints.yaml": "fd8a87e3aa6151a69ef4f73fc1272737422f95d4fbcaf7f6badcaf0e92c5efd9",
       "scripts/experiments/common.py": "fa60de0c4c5cda1e93558be4aab9157a2acfbe6ff1767110934a88430209fc71",
       "scripts/experiments/enforcement_ablation.py": "4031590663b098b86b96ad18f0effc418bfcf9c5127a5543bb59c712e64ddcc4",
-      "scripts/experiments/lock.py": "098a138e6757f2a922e5f0debcabd18dbbf749885eec939c8564efa3883041dc",
+      "scripts/experiments/lock.py": "3c40a5602d145d2e5dfb3144c1eaf5a57bde6d143dd4050d8c62f314c3c4f01c",
       "scripts/experiments/main.py": "9fc2526502adde201694415ef8ec07141d38f0e0906e3ce8cdcf90a60d28ee3c",
       "scripts/experiments/metrics.py": "fab5ea0568d558a7f2c87225161d8c92fe130c9ccb7c8f2431da2878fb0dc1e2",
       "scripts/experiments/preflight.py": "ea06e274a0473d64b902af9268bbc147f49ca696903890310fa8e7b25e686a96",
       "scripts/experiments/run.py": "8066366a935bab1ffed86d606ad2ffb88532b3f1f0809abcad9ffd3405880676",
       "scripts/experiments/validation.py": "92705569e4508d3ed03738b8b8cdaef58f959904faa6af7d7d2ed073c6f2e39e"
     },
-    "root_hash": "5f3276fddb44bd83ffeaaa2d093f803743d13d376a4d51a364502079585d3f86"
+    "root_hash": "74b0c5bec79ed4a64909ebcc151d5a61d4ea2f61bffbbadfb0bd075689c6adbf"
   }
 }

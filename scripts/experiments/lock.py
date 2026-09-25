@@ -34,18 +34,51 @@ EXPECTED_PER_MODE = 45
 MANIFEST_NAME = "evidence_manifest.json"
 
 
+# Non-code files that DEFINE the experiment. Listed one by one on purpose:
+# every entry changes what a trial means, so an omission would let
+# `provenance: MATCH` stand for inputs that were never actually checked.
+#
+#   red_ai_seeds.yaml         which attacks are attempted at all
+#   action_metadata.yaml      which actions count as dangerous (UAR numerator)
+#   safety_constraints.yaml   which rules hard-BLOCK before the tool layer
+#
+# Do NOT replace this with a `config/*.yaml` glob: a future config file that
+# only affects presentation would silently become load-bearing for provenance.
+_EXPERIMENT_SOURCES: tuple[str, ...] = (
+    "config/action_metadata.yaml",
+    "config/red_ai_seeds.yaml",
+    "config/safety_constraints.yaml",
+)
+
+
 # Code fingerprint (deterministic source manifest; git is unavailable)
 def _source_files() -> list[str]:
-    """Sorted py files under app/ and scripts/experiments/ (code that shapes
-    the experiment). Deterministic: repo_manifest is content-addressed."""
+    """Every file whose content defines the experiment, sorted.
+
+    Covers the .py code that shapes the run plus the explicitly declared
+    non-code inputs in ``_EXPERIMENT_SOURCES``. Deterministic: repo_manifest is
+    content-addressed.
+
+    Raises FileNotFoundError when a declared input is absent. Hashing the
+    remaining subset would still produce a self-consistent root_hash and could
+    still report MATCH, which is precisely the failure this list exists to
+    prevent: an experiment whose seeds or constraints were never hashed.
+    """
     entries = repo_manifest()["entries"]
-    return sorted(
+    missing = [rel for rel in _EXPERIMENT_SOURCES if rel not in entries]
+    if missing:
+        raise FileNotFoundError(
+            "experiment-defining input(s) absent from the tree, cannot verify "
+            "provenance: " + ", ".join(missing)
+        )
+    code = {
         rel
         for rel in entries
         if rel.endswith(".py")
         and (rel.startswith("app/") or rel.startswith("scripts/experiments/"))
         and not rel.endswith("__init__.py")
-    )
+    }
+    return sorted(code | set(_EXPERIMENT_SOURCES))
 
 
 def code_fingerprint() -> dict:

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
+
+import pytest
 
 from scripts.experiments.lock import code_fingerprint, fingerprint_status, write_evidence_manifest
 from scripts.experiments.preflight import response_contains_json
@@ -195,3 +198,142 @@ def test_lock_gate_reads_invariant_count_from_validation_json():
     assert "invariants_total" in source
     assert "pass_count == 16" not in source
     assert "len(inv_list) == 16" not in source
+
+
+# --- fingerprint coverage of experiment-defining inputs -------------------
+#
+# These tests hash real file content but never touch the working tree: the
+# repo root is redirected at a temporary copy, so a crashed or failing test
+# cannot leave a tracked config file modified. A repo whose whole point is
+# provenance must not be able to corrupt its own inputs in a test run.
+
+
+def _tmp_source_tree(tmp_path, monkeypatch):
+    """A temporary ROOT holding real copies of the experiment inputs.
+
+    Returns the tmp path; patch scripts.experiments.common.ROOT so that
+    repo_manifest() (used by lock._source_files) reads from it.
+    """
+    import shutil
+
+    from scripts.experiments import common
+
+    root = tmp_path / "tree"
+    (root / "config").mkdir(parents=True)
+    for name in ("action_metadata.yaml", "red_ai_seeds.yaml", "safety_constraints.yaml"):
+        shutil.copyfile(
+            Path(__file__).resolve().parent.parent / "config" / name,
+            root / "config" / name,
+        )
+    # One code file so the fingerprint is not input-only.
+    (root / "app").mkdir()
+    (root / "app" / "probe.py").write_text("VALUE = 1\n", encoding="utf-8")
+    monkeypatch.setattr(common, "ROOT", root)
+    return root
+
+
+def test_fingerprint_is_stable_for_an_unchanged_tree(tmp_path, monkeypatch):
+    _tmp_source_tree(tmp_path, monkeypatch)
+    from scripts.experiments.lock import code_fingerprint
+
+    first = code_fingerprint()
+    second = code_fingerprint()
+    assert first["root_hash"] == second["root_hash"]
+    assert first["count"] == second["count"]
+
+
+@pytest.mark.parametrize(
+    "changed_file",
+    [
+        "config/red_ai_seeds.yaml",
+        "config/action_metadata.yaml",
+        "config/safety_constraints.yaml",
+    ],
+)
+def test_changing_an_experiment_input_changes_the_root_hash(tmp_path, monkeypatch, changed_file):
+    """Each declared input must move the fingerprint.
+
+    red_ai_seeds decides which attacks run, action_metadata decides the UAR
+    numerator, safety_constraints decides what hard-BLOCKs. If any of them can
+    change without moving root_hash, then `provenance: MATCH` proves nothing
+    about the experiment that produced the evidence.
+    """
+    root = _tmp_source_tree(tmp_path, monkeypatch)
+    from scripts.experiments.lock import code_fingerprint
+
+    before = code_fingerprint()["root_hash"]
+    target = root / changed_file
+    target.write_text(target.read_text(encoding="utf-8") + "\n# altered\n", encoding="utf-8")
+    after = code_fingerprint()["root_hash"]
+    assert before != after, f"{changed_file} is not covered by the fingerprint"
+
+
+def test_missing_experiment_input_is_refused_not_silently_skipped(tmp_path, monkeypatch):
+    """A fingerprint over a subset would still be self-consistent and could
+    still report MATCH. An absent input must be an error, not a smaller list."""
+    root = _tmp_source_tree(tmp_path, monkeypatch)
+    from scripts.experiments.lock import code_fingerprint
+
+    (root / "config" / "red_ai_seeds.yaml").unlink()
+    with pytest.raises(FileNotFoundError) as ei:
+        code_fingerprint()
+    assert "red_ai_seeds.yaml" in str(ei.value)
+    assert "cannot verify provenance" in str(ei.value)
+
+
+def test_fingerprint_lists_inputs_explicitly_not_by_glob():
+    """A wildcard would make a future presentation-only config file silently
+    load-bearing for provenance, so the list must stay enumerated."""
+    from scripts.experiments.lock import _EXPERIMENT_SOURCES, _source_files
+
+    assert _EXPERIMENT_SOURCES == (
+        "config/action_metadata.yaml",
+        "config/red_ai_seeds.yaml",
+        "config/safety_constraints.yaml",
+    )
+    for declared in _EXPERIMENT_SOURCES:
+        assert declared in _source_files()
+    # No wildcard and nothing outside the declared set.
+    assert not any(ch in "".join(_EXPERIMENT_SOURCES) for ch in "*?[]")
+    non_code = {
+        f
+        for f in _source_files()
+        if not f.endswith(".py")
+    }
+    assert non_code == set(_EXPERIMENT_SOURCES)
+
+
+def test_archived_evidence_is_stale_under_the_wider_fingerprint():
+    """The stored fingerprint predates this coverage, so the archived bundle
+    must read as STALE with the three inputs listed as added."""
+    import json
+
+    from scripts.experiments.lock import fingerprint_status
+
+    stored = json.loads(
+        (
+            Path(__file__).resolve().parent.parent
+            / "data"
+            / "experiments"
+            / "authoritative_20260925_zero_degraded"
+            / "code_fingerprint.json"
+        ).read_text(encoding="utf-8")
+    )
+    stored_files = set(stored["files"])
+    assert not stored_files & set(
+        (
+            "config/action_metadata.yaml",
+            "config/red_ai_seeds.yaml",
+            "config/safety_constraints.yaml",
+        )
+    ), "precondition: the archived fingerprint must not already cover the inputs"
+
+    result = fingerprint_status(stored)
+
+    assert result["status"] == "STALE"
+    added = set(result["added_files"])
+    assert {
+        "config/action_metadata.yaml",
+        "config/red_ai_seeds.yaml",
+        "config/safety_constraints.yaml",
+    } <= added

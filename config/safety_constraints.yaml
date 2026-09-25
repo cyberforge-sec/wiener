@@ -1,0 +1,105 @@
+# safety_constraints.yaml
+# Hard safety constraints for the risk engine.
+#
+# Every entry uses the SAME schema:
+#   id, action, context_trust, behavior_deviation, action_criticality,
+#   privilege_impact, required_decision, reason_tag
+#
+# All guard values are numeric. A guard value of 0 means "no constraint on this
+# axis" (open). Matching compares the observed BlueAssessment value against the
+# guard on every non-zero axis.
+#
+# Precedence: BLOCK > REVIEW > ALLOW.
+# required_decision is populated ONLY when a hard safety constraint matched.
+# If no constraint matches → required_decision = null.
+#
+# Note: these constraints describe ONLY the specified scenarios below.
+# Do not generalize this file beyond these scenarios.
+
+constraints:
+  # --- BLOCK constraints (highest precedence) ---
+
+  - id: SC-001
+    action: isolate_endpoint
+    context_trust: 0
+    behavior_deviation: 80
+    action_criticality: 0
+    privilege_impact: 0
+    required_decision: BLOCK
+    reason_tag: "isolate_low_trust_high_deviation"
+
+  - id: SC-002
+    action: block_ip
+    context_trust: 0
+    behavior_deviation: 90
+    action_criticality: 0
+    privilege_impact: 0
+    required_decision: BLOCK
+    reason_tag: "block_ip_extreme_deviation"
+
+  - id: SC-003
+    action: disable_user
+    context_trust: 0
+    behavior_deviation: 0
+    action_criticality: 0
+    privilege_impact: 80
+    required_decision: BLOCK
+    reason_tag: "disable_user_high_privilege_impact"
+
+  # --- REVIEW constraints ---
+
+  - id: SC-010
+    action: isolate_endpoint
+    context_trust: 30
+    behavior_deviation: 50
+    action_criticality: 0
+    privilege_impact: 0
+    required_decision: REVIEW
+    reason_tag: "isolate_moderate_risk"
+
+  - id: SC-011
+    action: block_ip
+    context_trust: 20
+    behavior_deviation: 60
+    action_criticality: 0
+    privilege_impact: 0
+    required_decision: REVIEW
+    reason_tag: "block_ip_moderate_risk"
+
+  - id: SC-012
+    action: disable_user
+    context_trust: 20
+    behavior_deviation: 40
+    action_criticality: 0
+    privilege_impact: 0
+    required_decision: REVIEW
+    reason_tag: "disable_user_moderate_risk"
+
+  # --- ALLOW constraints (lowest precedence) ---
+
+  - id: SC-020
+    action: check_endpoint
+    context_trust: 100
+    behavior_deviation: 0
+    action_criticality: 0
+    privilege_impact: 0
+    required_decision: ALLOW
+    reason_tag: "check_endpoint_safe"
+
+  - id: SC-021
+    action: get_logs
+    context_trust: 100
+    behavior_deviation: 0
+    action_criticality: 0
+    privilege_impact: 0
+    required_decision: ALLOW
+    reason_tag: "get_logs_read_only"
+
+  - id: SC-022
+    action: search_ioc
+    context_trust: 100
+    behavior_deviation: 0
+    action_criticality: 0
+    privilege_impact: 0
+    required_decision: ALLOW
+    reason_tag: "search_ioc_read_only"

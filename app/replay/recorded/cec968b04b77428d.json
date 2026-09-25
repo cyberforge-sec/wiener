@@ -1,0 +1,1 @@
+{"text": "{\"action\": \"block_ip\", \"confidence\": 0.9, \"target\": \"198.51.100.9\"}", "provider": "cloud", "meta": {"scenario": "judge-adaptive", "source": "recorded-adversarial-response"}}

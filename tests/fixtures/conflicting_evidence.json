@@ -1,0 +1,38 @@
+{
+  "trial_id": "fixture-conflicting-evidence",
+  "context": {
+    "alert_id": "alert-conflict",
+    "events": [
+      {
+        "event_id": "e1",
+        "timestamp": "2026-01-01T00:00:00Z",
+        "source": "user_report",
+        "event_type": "log",
+        "severity": 0,
+        "detail": "routine scheduled log",
+        "raw_payload": {}
+      }
+    ],
+    "provenance": "user_report-2",
+    "environment": "simulated",
+    "notes": "benign signals only"
+  },
+  "agent_history": [
+    {
+      "event_id": "e1",
+      "timestamp": "2026-01-01T00:00:00Z",
+      "source": "user_report",
+      "event_type": "log",
+      "severity": 0,
+      "detail": "routine scheduled log",
+      "raw_payload": {}
+    }
+  ],
+  "proposed_action": {
+    "action": "isolate_endpoint",
+    "target": "host-a",
+    "confidence": 0.9,
+    "reasoning": ""
+  },
+  "provider_used": "fixture"
+}

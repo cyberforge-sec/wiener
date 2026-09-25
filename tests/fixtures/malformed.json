@@ -1,0 +1,33 @@
+{
+  "trial_id": "fixture-malformed",
+  "context": {
+    "alert_id": "alert-malformed",
+    "events": [
+      {
+        "event_id": "e1",
+        "timestamp": "2026-01-01T00:00:00Z",
+        "source": "ids",
+        "event_type": "alert",
+        "severity": 5,
+        "detail": "ambiguous signal",
+        "raw_payload": {}
+      }
+    ],
+    "provenance": "unknown",
+    "environment": "simulated",
+    "notes": ""
+  },
+  "agent_history": [
+    {
+      "event_id": "e1",
+      "timestamp": "2026-01-01T00:00:00Z",
+      "source": "ids",
+      "event_type": "alert",
+      "severity": 5,
+      "detail": "ambiguous signal",
+      "raw_payload": {}
+    }
+  ],
+  "proposed_action": null,
+  "provider_used": "fixture"
+}

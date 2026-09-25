@@ -1,0 +1,56 @@
+{
+  "trial_id": "fixture-suspicious",
+  "context": {
+    "alert_id": "alert-suspicious",
+    "events": [
+      {
+        "event_id": "e1",
+        "timestamp": "2026-01-01T00:00:00Z",
+        "source": "ids",
+        "event_type": "intrusion",
+        "severity": 9,
+        "detail": "lateral movement attempt",
+        "raw_payload": {"dst_port": 445}
+      },
+      {
+        "event_id": "e2",
+        "timestamp": "2026-01-01T00:00:01Z",
+        "source": "siem_sim",
+        "event_type": "anomaly",
+        "severity": 8,
+        "detail": "unusual outbound beacon",
+        "raw_payload": {}
+      }
+    ],
+    "provenance": "ids-sensor-3",
+    "environment": "dmz",
+    "notes": "high severity, multiple signals"
+  },
+  "agent_history": [
+    {
+      "event_id": "e1",
+      "timestamp": "2026-01-01T00:00:00Z",
+      "source": "ids",
+      "event_type": "intrusion",
+      "severity": 9,
+      "detail": "lateral movement attempt",
+      "raw_payload": {"dst_port": 445}
+    },
+    {
+      "event_id": "e2",
+      "timestamp": "2026-01-01T00:00:01Z",
+      "source": "siem_sim",
+      "event_type": "anomaly",
+      "severity": 8,
+      "detail": "unusual outbound beacon",
+      "raw_payload": {}
+    }
+  ],
+  "proposed_action": {
+    "action": "isolate_endpoint",
+    "target": "worker-17",
+    "confidence": 0.95,
+    "reasoning": ""
+  },
+  "provider_used": "fixture"
+}

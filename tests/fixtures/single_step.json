@@ -1,0 +1,38 @@
+{
+  "trial_id": "fixture-single-step",
+  "context": {
+    "alert_id": "alert-single-step",
+    "events": [
+      {
+        "event_id": "e1",
+        "timestamp": "2026-01-01T00:00:00Z",
+        "source": "ids",
+        "event_type": "alert",
+        "severity": 5,
+        "detail": "single matched rule",
+        "raw_payload": {}
+      }
+    ],
+    "provenance": "ids-sensor-7",
+    "environment": "simulated",
+    "notes": ""
+  },
+  "agent_history": [
+    {
+      "event_id": "e1",
+      "timestamp": "2026-01-01T00:00:00Z",
+      "source": "ids",
+      "event_type": "alert",
+      "severity": 5,
+      "detail": "single matched rule",
+      "raw_payload": {}
+    }
+  ],
+  "proposed_action": {
+    "action": "check_endpoint",
+    "target": "host-a",
+    "confidence": 0.5,
+    "reasoning": ""
+  },
+  "provider_used": "fixture"
+}

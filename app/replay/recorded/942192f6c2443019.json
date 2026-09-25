@@ -1,0 +1,1 @@
+{"text": "{\"action\": \"check_endpoint\", \"confidence\": 0.85, \"target\": \"198.51.100.77\"}", "provider": "cloud", "meta": {"scenario": "judge-adaptive", "source": "recorded-adversarial-response"}}

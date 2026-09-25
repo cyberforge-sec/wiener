@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+"""WIENER release health check launcher.
+
+Usage:
+  run_healthcheck [--json]
+"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from scripts.health_check import main  # noqa: E402
+
+if __name__ == "__main__":
+    sys.exit(main())

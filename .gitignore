@@ -1,0 +1,42 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python/tool caches and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+
+# Runtime output and provider diagnostics (may contain request/response data)
+data/logs/
+data/replays/
+data/integration/
+data/opencode_raw.log
+data/**/*_diag.log
+*.log
+
+# Keep only the curated, non-secret dashboard evidence and historical report.
+# Other captures are machine-local experiment output and are reproducible.
+data/experiments/*
+!data/experiments/demo.json
+!data/experiments/authoritative_20260912_clean_2252/
+data/experiments/authoritative_20260912_clean_2252/*
+!data/experiments/authoritative_20260912_clean_2252/metrics.json
+!data/experiments/authoritative_20260912_clean_2252/validation.json
+!data/experiments/authoritative_20260912_clean_2252/trials.jsonl
+!data/experiments/authoritative_20260912_clean_2252/evidence_manifest.json
+!data/experiments/authoritative_20260912_clean_2252/code_fingerprint.json
+
+# Internal working notes and superseded local checksum manifest
+SUMMARY.md
+release/MANIFEST.sha256

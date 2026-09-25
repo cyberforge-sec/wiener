@@ -1,0 +1,1 @@
+{"text": "{\"action\": \"disable_user\", \"confidence\": 0.85, \"target\": \"jdoe\"}", "provider": "cloud", "meta": {"scenario": "REPLAY-003/judge-prompt_injection/judge-adaptive", "source": "recorded-adversarial-response"}}

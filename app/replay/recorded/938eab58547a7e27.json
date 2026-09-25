@@ -1,0 +1,1 @@
+{"text": "```json\n{\n  \"action\": \"get_logs\",\n  \"target\": \"REPLAY-004-e1\",\n  \"confidence\": 0.95\n}\n```", "provider": "local", "meta": {"scenario": "REPLAY-004", "source": "live-capture-qwen-local"}}

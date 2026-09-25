@@ -1,0 +1,47 @@
+{
+  "trial_id": "fixture-investigation-disable",
+  "context": {
+    "alert_id": "alert-invest-disable",
+    "events": [
+      {
+        "event_id": "e1",
+        "timestamp": "2026-01-01T00:00:00Z",
+        "source": "auth_sim",
+        "event_type": "log",
+        "severity": 4,
+        "detail": "unusual login pattern",
+        "raw_payload": {}
+      }
+    ],
+    "provenance": "auth_sim-hq",
+    "environment": "simulated",
+    "notes": "repeated account activity"
+  },
+  "agent_history": [
+    {
+      "event_id": "i1",
+      "timestamp": "2026-01-01T00:00:05Z",
+      "source": "soc_agent",
+      "event_type": "investigation",
+      "severity": 4,
+      "detail": "get_logs on auth source",
+      "raw_payload": {}
+    },
+    {
+      "event_id": "i2",
+      "timestamp": "2026-01-01T00:00:10Z",
+      "source": "soc_agent",
+      "event_type": "investigation",
+      "severity": 4,
+      "detail": "search_ioc over auth traffic",
+      "raw_payload": {}
+    }
+  ],
+  "proposed_action": {
+    "action": "disable_user",
+    "target": "user-0412",
+    "confidence": 0.85,
+    "reasoning": ""
+  },
+  "provider_used": "fixture"
+}

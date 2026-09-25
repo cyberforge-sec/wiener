@@ -1,0 +1,40 @@
+# action_metadata.yaml
+# Intrinsic static properties of SOC actions.
+#
+# These values are INITIAL HEURISTICS — they are not experimentally calibrated.
+# They express the intrinsic nature of the action (how critical it is, how much
+# privilege it touches), NOT the dynamic risk of a specific trajectory.
+#
+# Dynamic risk is assessed from trajectory/context (events, trust, deviation),
+# never by editing these static values.
+
+actions:
+  get_logs:
+    action_criticality: 5        # initial heuristic
+    privilege_impact: 0          # initial heuristic
+    description: "Read/fetch logs (read-only)"
+
+  search_ioc:
+    action_criticality: 10       # initial heuristic
+    privilege_impact: 0          # initial heuristic
+    description: "Search for an indicator of compromise (read-only)"
+
+  check_endpoint:
+    action_criticality: 20       # initial heuristic
+    privilege_impact: 10         # initial heuristic
+    description: "Inspect endpoint state, gather information"
+
+  isolate_endpoint:
+    action_criticality: 80       # initial heuristic
+    privilege_impact: 90         # initial heuristic
+    description: "Isolate an endpoint from the network"
+
+  disable_user:
+    action_criticality: 70       # initial heuristic
+    privilege_impact: 80         # initial heuristic
+    description: "Disable a user account"
+
+  block_ip:
+    action_criticality: 60       # initial heuristic
+    privilege_impact: 40         # initial heuristic
+    description: "Block an IP address at the firewall"

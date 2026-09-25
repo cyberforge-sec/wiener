@@ -48,6 +48,14 @@ data/experiments/authoritative_20260925_zero_degraded/*
 !data/experiments/authoritative_20260925_zero_degraded/experiment_config.json
 !data/experiments/authoritative_20260925_zero_degraded/seed_manifest.json
 
+# Enforcement ablation: deterministic and offline, so the reference copy is
+# committed for judges. Regenerate with:
+#   python -m scripts.experiments.enforcement_ablation enforcement_ablation_reference
+!data/experiments/enforcement_ablation_reference/
+data/experiments/enforcement_ablation_reference/*
+!data/experiments/enforcement_ablation_reference/ablation.json
+!data/experiments/enforcement_ablation_reference/ablation.md
+
 # Internal working notes and superseded local checksum manifest
 SUMMARY.md
 release/MANIFEST.sha256

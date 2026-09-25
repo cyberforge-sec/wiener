@@ -144,7 +144,14 @@ def _mode_name(mode: str) -> str:
 
 
 def _locked_badge(bundle: EvidenceBundle) -> str:
-    if bundle.evidence_status == "LOCKED_VERIFIED":
+    locked = bundle.evidence_status == "LOCKED_VERIFIED"
+    source_status = str((bundle.source_provenance or {}).get("status") or "UNKNOWN").lower()
+    if locked and source_status == "stale":
+        return (
+            '<div class="locked locked--candidate"><b></b>LOCKED ARTIFACTS · '
+            f'{bundle.validation_pass} / {bundle.validation_invariants} PASS · SOURCE TREE STALE</div>'
+        )
+    if locked:
         return (
             '<div class="locked"><b></b>LOCKED EVIDENCE · '
             f'{bundle.validation_pass} / {bundle.validation_invariants} PASS · VERIFIED</div>'
@@ -277,7 +284,13 @@ def _locked_at_lines(raw: str | None) -> str:
 
 def _provenance(bundle: EvidenceBundle) -> str:
     locked = bundle.evidence_status == "LOCKED_VERIFIED"
-    status_line = "STATUS: VERIFIED SOUND" if locked else "STATUS: CANDIDATE EVIDENCE"
+    source_status = str((bundle.source_provenance or {}).get("status") or "UNKNOWN").lower()
+    if locked and source_status == "stale":
+        status_line = "STATUS: ARTIFACTS LOCKED · SOURCE TREE STALE"
+    elif locked:
+        status_line = "STATUS: VERIFIED SOUND"
+    else:
+        status_line = "STATUS: CANDIDATE EVIDENCE"
     evidence_row = f'<div class="manifest-item"><span>EVIDENCE STATUS</span><b class="pass pill">{_esc(bundle.evidence_status)}</b></div>'
     if locked:
         evidence_row += (
@@ -285,7 +298,11 @@ def _provenance(bundle: EvidenceBundle) -> str:
             f'<span>LOCKED AT</span><b class="ts">{_locked_at_lines(bundle.locked_at)}</b></div>'
         )
     code_row = f'<div class="manifest-item"><span>CODE FINGERPRINT</span><b data-fingerprint-root="{_attr(bundle.code_fingerprint_root)}">{_esc(bundle.code_fingerprint_root or "—")}</b></div>'
-    status_row = f'{evidence_row}{code_row}'
+    source = bundle.source_provenance or {}
+    source_status = str(source.get("status") or "UNKNOWN").lower()
+    source_label = "MATCH" if source_status == "match" else source_status.upper()
+    source_row = f'<div class="manifest-item"><span>SOURCE TREE</span><b data-source-provenance="{_attr(source_status)}">{_esc(source_label)}</b></div>'
+    status_row = f'{evidence_row}{code_row}{source_row}'
     artifact_row = ""
     if bundle.artifact_hashes:
         try:

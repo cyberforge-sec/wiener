@@ -320,6 +320,7 @@ The health check reports unavailable cloud/Ollama as warnings because replay is 
 - [ ] Application starts and `/health` returns `ok`.
 - [ ] Replay scenarios are deterministic (setup smoke test only).
 - [ ] The required live provider is selected and `/health` reports it.
+- [ ] The dashboard discloses the recorded evidence source-provenance status.
 - [ ] Cloud uses evaluator-provided configuration.
 - [ ] Local mode reaches evaluator-provided Ollama.
 - [ ] The safety boundary remains simulated.

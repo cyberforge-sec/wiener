@@ -159,6 +159,7 @@ class EvidenceBundle:
     locked_at: str | None = None
     code_fingerprint_root: str | None = None
     artifact_hashes: dict[str, str] | None = None
+    source_provenance: dict[str, Any] | None = None
 
 
 # Stored-row lift: fields copied with resilience, no metric recomputed here.
@@ -470,6 +471,7 @@ def _load(dir_path: Path) -> EvidenceBundle:
         locked_at=locked_at,
         code_fingerprint_root=code_root,
         artifact_hashes=artifact_hashes,
+        source_provenance=manifest.get("source_provenance") or {},
     )
 
 

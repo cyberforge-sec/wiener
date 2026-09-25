@@ -24,6 +24,7 @@ def test_load_evidence_authoritative_facts():
     assert b.evidence_status == "LOCKED_VERIFIED"
     assert b.locked_at is not None
     assert (b.code_fingerprint_root or "").startswith("39031f6d")
+    assert b.source_provenance["status"] == "STALE"
     assert b.n_trials == 135, b.n_trials
     assert b.trials_per_mode == 45
     assert b.modes == ("no_defense", "basic_prompt_defense", "wiener")
@@ -96,7 +97,7 @@ def test_presentation_page_phrases_and_attrs():
     assert "40.0%" not in page and "70.0%" not in page
     assert "demo.json" not in page
     # Locked badge renders from the manifest, not a hardcoded string.
-    assert "LOCKED EVIDENCE · 16 / 16 PASS · VERIFIED" in page
+    assert "LOCKED ARTIFACTS · 16 / 16 PASS · SOURCE TREE STALE" in page
     assert "CANDIDATE EVIDENCE" not in page.split('<main')[0]
     # Five areas + evidence + provenance.
     for area in ("RED AI", "SOC AGENT", "BLUE AI", "RISK ENGINE / POLICY GATE", "METRICS"):
@@ -124,7 +125,14 @@ def test_presentation_page_zero_never_looks_like_attack_counting():
     assert "0 false" not in page
 
 
+def test_presentation_page_exposes_source_provenance_status():
+    d = build_evidence_dashboard(load_evidence())
+    page = presentation_page(d)
 
+    assert 'data-source-provenance="stale"' in page
+    assert "SOURCE TREE" in page
+    assert "STATUS: ARTIFACTS LOCKED · SOURCE TREE STALE" in page
+    assert "LOCKED ARTIFACTS · 16 / 16 PASS · SOURCE TREE STALE" in page
 def _render_for(action: str) -> dict:
     from tests.test_judge import StanceLLM
 

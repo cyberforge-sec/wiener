@@ -434,7 +434,7 @@ The server binds `127.0.0.1` by default and has **no authentication**. Anyone wh
 
 Implemented: FastAPI API, Judge Mode, cloud/local/replay providers, Red AI loop, SOC/Blue/Risk/Policy pipeline, deterministic replay, tests, and simulated tools. Cloud and Ollama are the live-evaluation integrations; replay is offline setup verification. All tool execution and dashboard evidence are simulated/PoC artifacts. WIENER is not production-ready.
 
-See [architecture](docs/architecture.md), [provider adapters](docs/PROVIDERS.md), [setup notes](docs/competition_setup.md), [demo runbook](docs/DEMO_RUNBOOK.md), [contracts](docs/contracts.md), and [benchmark notes](docs/BENCHMARK.md).
+See [architecture](docs/architecture.md), [provider adapters](docs/PROVIDERS.md), [cloud route survey](docs/PROVIDER_SURVEY.md), [setup notes](docs/competition_setup.md), [demo runbook](docs/DEMO_RUNBOOK.md), [contracts](docs/contracts.md), and [benchmark notes](docs/BENCHMARK.md).
 
 ## 19. Evidence and Experiments
 

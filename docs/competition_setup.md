@@ -20,7 +20,10 @@ deterministic evaluation. The API health endpoint is `/health`.
 
 ## Provider configuration
 
-Cloud is optional and is supplied by the evaluator through `.env`:
+Cloud is optional and is supplied by the evaluator through `.env`. OpenCode is
+not required: direct OpenAI and any OpenAI-compatible provider/gateway work
+with the existing cloud adapter. The `WIENER_OPENCODE_*` names are legacy
+environment-variable names, not a vendor requirement:
 
 ```env
 WIENER_OPENCODE_API_KEY=your_api_key_here
@@ -28,10 +31,13 @@ WIENER_OPENCODE_BASE_URL=https://your-provider.example/v1
 WIENER_OPENCODE_MODEL=your_supported_model
 ```
 
-Ollama is optional. Start it, pull a selected model, and configure
+Ollama is optional for the overall application, but it is required when using
+the built-in local provider because that provider calls Ollama's
+`/api/generate` API. Start it, pull a selected model, and configure
 `WIENER_LOCAL_HOST`, `WIENER_LOCAL_MODEL`, timeout, token limit, and keep-alive
-variables from `.env.example`. With neither cloud nor Ollama available,
-replay is a supported deterministic fallback.
+variables from `.env.example`. Other local runtimes are not direct backends in
+this release. With neither cloud nor Ollama available, replay is a supported
+deterministic fallback.
 
 ## Docker
 

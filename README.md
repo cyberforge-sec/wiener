@@ -123,6 +123,13 @@ WIENER_LLM_TIMEOUT_S=30
 
 `WIENER_OPENCODE_TEMPERATURE` and `WIENER_OPENCODE_RESPONSE_FORMAT` are optional. An empty key skips cloud; an unavailable cloud tier falls to local then replay. Do not commit `.env`.
 
+| Cloud choice | Works now? | Notes |
+| --- | --- | --- |
+| OpenAI API | Yes | Configure its standard `/v1` base URL, key, and model. |
+| Any OpenAI-compatible provider/gateway | Yes | Configure that service's compatible base URL, key, and model. |
+| OpenCode | Optional | It is one possible compatible service, not a requirement. |
+| Native Anthropic or Gemini API | Not directly | Use an OpenAI-compatible gateway, or add a dedicated provider adapter. |
+
 ## 10. Local LLM Setup (Ollama)
 
 The local provider currently calls the Ollama HTTP API (`/api/generate`), so
@@ -146,6 +153,12 @@ docker run --rm -p 8000:8000 --add-host=host.docker.internal:host-gateway -e WIE
 Local inference is optional; replay remains available without it. Other local
 runtimes (LM Studio, vLLM, llama.cpp, LocalAI) are not direct local-provider
 backends in this release unless they expose an Ollama-compatible API.
+
+| Local choice | Works now? | Notes |
+| --- | --- | --- |
+| Ollama | Yes | Required for the built-in `local` provider; choose any Ollama model that can return the required JSON. |
+| No local runtime | Yes | Use cloud or deterministic replay instead. |
+| LM Studio, vLLM, llama.cpp, LocalAI | Not directly | Add an adapter, or expose an Ollama-compatible endpoint. |
 
 ## 11. Replay Mode
 

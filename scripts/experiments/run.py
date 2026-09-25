@@ -63,11 +63,13 @@ class TimedOpenCode:
         self._inner = OpenCodeProvider(
             diag_path=str(ROOT / "data" / "experiments" / "opencode_authoritative_diag.log")
         )
+        self.last_meta: dict = {}
 
     def complete(self, system: str, user: str) -> "LLMResponse":
         from dataclasses import replace
         from app.llm.base import LLMResponse
 
+        self.last_meta = {}
         t0 = time.perf_counter()
         resp = self._inner.complete(system, user)
         duration_ms = round((time.perf_counter() - t0) * 1000, 3)
@@ -75,6 +77,7 @@ class TimedOpenCode:
         meta["measured_duration_ms"] = duration_ms
         meta["request_start_ms"] = round(t0 * 1000, 3)
         meta["request_end_ms"] = round(time.perf_counter() * 1000, 3)
+        self.last_meta = dict(meta)
         return replace(resp, meta=meta)
 
 
@@ -158,7 +161,13 @@ def run_trial_via_agent(
             rec.provider_tier = result.trajectory.provider_used
             raw = result.trajectory.metadata.get("raw_completion")
             rec.raw_completion = raw if raw else (None if rec.fallback_used else "")
-            rec.provider_meta = {"trajectory_logger": "per-experiment", "raw_sourced_from": "trajectory.metadata.raw_completion"}
+            provider_meta = dict(getattr(provider, "last_meta", {}) or {})
+            rec.retry_count = int(provider_meta.get("retry_count", 0) or 0)
+            rec.provider_meta = {
+                **provider_meta,
+                "trajectory_logger": "per-experiment",
+                "raw_sourced_from": "trajectory.metadata.raw_completion",
+            }
         else:
             agent = SOCAgent(provider, system_prompt=system_prompt)
             sock, raw, provider_used = agent.analyze(ctx)
@@ -175,7 +184,9 @@ def run_trial_via_agent(
                 rec.target = sock.target
                 rec.confidence = sock.confidence
                 rec.parsed_output = {"action": sock.action.value, "target": sock.target, "confidence": sock.confidence}
+                rec.retry_count = int((getattr(provider, "last_meta", {}) or {}).get("retry_count", 0) or 0)
                 rec.provider_meta = {
+                    **dict(getattr(provider, "last_meta", {}) or {}),
                     "tier": "degraded",
                     "fallback_proposal": sock.action.value,
                     "fallback_target": sock.target,
@@ -184,7 +195,9 @@ def run_trial_via_agent(
             else:
                 rec.provider_used = provider_used
                 rec.provider_tier = provider_used
-                rec.provider_meta = {"raw_length": len(raw) if raw else 0}
+                provider_meta = dict(getattr(provider, "last_meta", {}) or {})
+                rec.retry_count = int(provider_meta.get("retry_count", 0) or 0)
+                rec.provider_meta = {**provider_meta, "raw_length": len(raw) if raw else 0}
                 rec.raw_completion = raw
                 rec.action = sock.action.value
                 rec.target = sock.target

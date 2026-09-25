@@ -23,6 +23,15 @@ data/experiments/authoritative_20260912_clean_2252/*
 !data/experiments/authoritative_20260912_clean_2252/code_fingerprint.json
 !data/experiments/authoritative_20260912_clean_2252/experiment_config.json
 !data/experiments/authoritative_20260912_clean_2252/seed_manifest.json
+!data/experiments/authoritative_20260925_zero_degraded/
+data/experiments/authoritative_20260925_zero_degraded/*
+!data/experiments/authoritative_20260925_zero_degraded/metrics.json
+!data/experiments/authoritative_20260925_zero_degraded/validation.json
+!data/experiments/authoritative_20260925_zero_degraded/trials.jsonl
+!data/experiments/authoritative_20260925_zero_degraded/evidence_manifest.json
+!data/experiments/authoritative_20260925_zero_degraded/code_fingerprint.json
+!data/experiments/authoritative_20260925_zero_degraded/experiment_config.json
+!data/experiments/authoritative_20260925_zero_degraded/seed_manifest.json
 *.log
 SUMMARY.md
 release/MANIFEST.sha256

@@ -20,11 +20,11 @@ def test_load_evidence_authoritative_facts():
     b = load_evidence()
     assert b is not None
     # Resolver picks the newest LOCKED_VERIFIED run, never the legacy hardcoded id.
-    assert b.experiment_id == "authoritative_20260912_clean_2252"
+    assert b.experiment_id == "authoritative_20260925_zero_degraded"
     assert b.evidence_status == "LOCKED_VERIFIED"
     assert b.locked_at is not None
-    assert (b.code_fingerprint_root or "").startswith("39031f6d")
-    assert b.source_provenance["status"] == "STALE"
+    assert (b.code_fingerprint_root or "").startswith("15a61346")
+    assert b.source_provenance["status"] == "MATCH"
     assert b.n_trials == 135, b.n_trials
     assert b.trials_per_mode == 45
     assert b.modes == ("no_defense", "basic_prompt_defense", "wiener")
@@ -34,9 +34,9 @@ def test_load_evidence_authoritative_facts():
     assert b.degraded_count == 0
     assert b.provider_counts == {"opencode": 135}
     # The exact defense-path story from the locked artifacts.
-    assert b.proposals == 10
-    assert b.blocked == 10
-    assert b.reviewed == 0
+    assert b.proposals == 4
+    assert b.blocked == 3
+    assert b.reviewed == 1
     assert b.executed == 0
     assert (b.blocked + b.reviewed) == b.proposals
     # Stored metrics, shown verbatim.
@@ -49,7 +49,7 @@ def test_load_evidence_authoritative_facts():
     assert b.history is not None
     assert b.history.n_trials == 30
     assert b.history.uar_by_mode["wiener"] == 0.0
-    assert b.trials_sha256.startswith("f0428ec4")
+    assert b.trials_sha256.startswith("a31d69de")
 
 
 def test_load_evidence_missing_returns_none(monkeypatch, tmp_path):
@@ -88,27 +88,27 @@ def test_presentation_page_phrases_and_attrs():
     d = build_evidence_dashboard(load_evidence())
     page = presentation_page(d)
     # Exact competition wording, never "12 attacks blocked".
-    assert "Dangerous proposals reaching SOC-agent stage: <b>10</b>" in page
+    assert "Dangerous proposals reaching SOC-agent stage: <b>4</b>" in page
     assert "Unsafe tool executions: <b>0</b>" in page
-    assert "10 BLOCK" in page and "0 REVIEW" in page
+    assert "3 BLOCK" in page and "1 REVIEW" in page
     assert "FIR 0.0% — 30 benign trials; 0 incorrect interventions" in page
     # Historical demo.json values must be quarantined OUT of the main page.
     assert "HISTORICAL" not in page
     assert "40.0%" not in page and "70.0%" not in page
     assert "demo.json" not in page
     # Locked badge renders from the manifest, not a hardcoded string.
-    assert "LOCKED ARTIFACTS · 16 / 16 PASS · SOURCE TREE STALE" in page
+    assert "LOCKED EVIDENCE · 16 / 16 PASS · VERIFIED" in page
     assert "CANDIDATE EVIDENCE" not in page.split('<main')[0]
     # Five areas + evidence + provenance.
     for area in ("RED AI", "SOC AGENT", "BLUE AI", "RISK ENGINE / POLICY GATE", "METRICS"):
         assert area in page
     assert "Provenance" in page and "AUTHORITATIVE DATA LOCKED" in page
-    assert "data/experiments/authoritative_20260912_clean_2252/" in page
+    assert "data/experiments/authoritative_20260925_zero_degraded/" in page
     assert (data_attrs := _attrs(page))
     assert data_attrs["authoritative"] == "true"
-    assert data_attrs["evidence-proposals"] == "10"
-    assert data_attrs["evidence-blocked"] == "10"
-    assert data_attrs["evidence-reviewed"] == "0"
+    assert data_attrs["evidence-proposals"] == "4"
+    assert data_attrs["evidence-blocked"] == "3"
+    assert data_attrs["evidence-reviewed"] == "1"
     assert data_attrs["unsafe-tool-executions"] == "0"
     assert data_attrs["uapr"] == "1.0"
     assert data_attrs["validation"] == "PASS"
@@ -129,10 +129,12 @@ def test_presentation_page_exposes_source_provenance_status():
     d = build_evidence_dashboard(load_evidence())
     page = presentation_page(d)
 
-    assert 'data-source-provenance="stale"' in page
+    assert 'data-source-provenance="match"' in page
     assert "SOURCE TREE" in page
-    assert "STATUS: ARTIFACTS LOCKED · SOURCE TREE STALE" in page
-    assert "LOCKED ARTIFACTS · 16 / 16 PASS · SOURCE TREE STALE" in page
+    assert "STATUS: VERIFIED SOUND" in page
+    assert "LOCKED EVIDENCE · 16 / 16 PASS · VERIFIED" in page
+
+
 def _render_for(action: str) -> dict:
     from tests.test_judge import StanceLLM
 

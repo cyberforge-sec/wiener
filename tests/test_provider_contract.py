@@ -84,6 +84,46 @@ def test_cloud_provider_null_content_is_controlled():
     assert ei.value.kind == "malformed"
 
 
+def test_cloud_provider_retries_empty_content_then_succeeds():
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        content = None if calls == 1 else _GOOD_RESPONSE_TEXT
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+    provider = OpenCodeProvider(
+        api_key="key", base_url="https://example.invalid/v1", model="m",
+        response_format="json_object", transport=httpx.MockTransport(handler),
+    )
+
+    resp = provider.complete(SYSTEM, USER)
+
+    assert calls == 2
+    assert resp.meta["retry_count"] == 1
+
+
+def test_cloud_provider_retries_non_json_when_format_requested():
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        content = "Result: not a JSON object" if calls == 1 else _GOOD_RESPONSE_TEXT
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+    provider = OpenCodeProvider(
+        api_key="key", base_url="https://example.invalid/v1", model="m",
+        response_format="json_object", transport=httpx.MockTransport(handler),
+    )
+
+    resp = provider.complete(SYSTEM, USER)
+
+    assert calls == 2
+    assert resp.meta["retry_count"] == 1
+
+
 def test_cloud_provider_sends_response_format_and_retries_when_rejected():
     request_bodies: list[dict] = []
     calls = 0

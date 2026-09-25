@@ -7,6 +7,7 @@ import httpx
 
 from ..config import config
 from .base import LLMResponse, ProviderUnavailable
+from .parsing import extract_json_object
 
 
 def _strip_stream_sentinel(content: bytes) -> bytes:
@@ -19,6 +20,9 @@ def _strip_stream_sentinel(content: bytes) -> bytes:
     if idx != -1:
         text = text[:idx]
     return text.strip().encode("utf-8")
+
+
+MAX_CONTENT_ATTEMPTS = 3
 
 
 class OpenCodeProvider:
@@ -118,35 +122,59 @@ class OpenCodeProvider:
 
         url = f"{self._base_url.rstrip('/')}/chat/completions"
         headers = {"Authorization": f"Bearer {self._api_key}"}
-
-        # Try with response_format first; retry without on 4xx.
-        attempts = [True, False] if self._response_format else [False]
+        format_attempts = [True, False] if self._response_format else [False]
         last_exc: Exception | None = None
+        request_count = 0
 
-        for use_format in attempts:
-            try:
-                with self._build_client() as client:
-                    resp = client.post(url, headers=headers, json=self._payload(system, user, use_format))
-                    if resp.status_code in (400, 422, 501) and use_format:
-                        self._diag(f"retry-without-format (HTTP {resp.status_code})", resp.content)
-                        continue
-                    resp.raise_for_status()
-                    body = resp.content
-                raw = _strip_stream_sentinel(body)
-                data = json.loads(raw)
-                content = data["choices"][0]["message"].get("content")
-                if not content:
-                    self._diag("null-content", body)
-                    raise ProviderUnavailable("OpenCodeProvider: empty content in response", kind="malformed")
-                text = content.strip()
-            except (httpx.HTTPError, TimeoutError, OSError) as exc:
-                last_exc = exc
-                continue
-            except (ValueError, KeyError, IndexError, TypeError) as exc:
-                last_exc = exc
-                continue
-            else:
-                return LLMResponse(text=text, provider=self.name, meta={"model": self._model})
+        for use_format in format_attempts:
+            for _ in range(MAX_CONTENT_ATTEMPTS):
+                request_count += 1
+                try:
+                    with self._build_client() as client:
+                        resp = client.post(url, headers=headers, json=self._payload(system, user, use_format))
+                        if resp.status_code in (400, 422, 501) and use_format:
+                            self._diag(f"retry-without-format (HTTP {resp.status_code})", resp.content)
+                            last_exc = ProviderUnavailable(
+                                f"OpenCodeProvider: response_format rejected (HTTP {resp.status_code})",
+                                kind="unavailable",
+                            )
+                            break
+                        resp.raise_for_status()
+                        body = resp.content
+                    raw = _strip_stream_sentinel(body)
+                    data = json.loads(raw)
+                    content = data["choices"][0]["message"].get("content")
+                    if not isinstance(content, str) or not content.strip():
+                        self._diag("null-content", body)
+                        raise ProviderUnavailable("OpenCodeProvider: empty content in response", kind="malformed")
+                    text = content.strip()
+                    if use_format and self._response_format == "json_object":
+                        try:
+                            extract_json_object(text)
+                        except ValueError as exc:
+                            raise ProviderUnavailable(
+                                "OpenCodeProvider: response_format produced no JSON object",
+                                kind="malformed",
+                            ) from exc
+                except ProviderUnavailable as exc:
+                    last_exc = exc
+                    continue
+                except (httpx.HTTPError, TimeoutError, OSError) as exc:
+                    last_exc = exc
+                    continue
+                except (ValueError, KeyError, IndexError, TypeError) as exc:
+                    last_exc = exc
+                    continue
+                else:
+                    return LLMResponse(
+                        text=text,
+                        provider=self.name,
+                        meta={
+                            "model": self._model,
+                            "request_attempts": request_count,
+                            "retry_count": request_count - 1,
+                        },
+                    )
 
         if isinstance(last_exc, ProviderUnavailable):
             raise last_exc

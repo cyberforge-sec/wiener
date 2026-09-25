@@ -17,6 +17,7 @@ import httpx
 from app.config import config
 from app.llm.local_provider import LocalProvider, ollama_reachable
 from app.llm.opencode_provider import OpenCodeProvider
+from app.llm.parsing import extract_json_object
 from app.orchestration.pipeline import Pipeline
 
 from .common import ROOT, env_snapshot, now_iso, repo_manifest, sha256
@@ -24,6 +25,15 @@ from .common import ROOT, env_snapshot, now_iso, repo_manifest, sha256
 MINIMAL_USER = "Reply with the single word: ok."
 MINIMAL_SYS = "You are a test harness."
 MINIMAL_JSON_PROBE = 'Return the JSON object {"action":"check_endpoint","target":"probe","confidence":0.5}'
+
+
+def response_contains_json(text: str) -> bool:
+    """Accept the same prose-wrapped JSON that the runtime parser accepts."""
+    try:
+        extract_json_object(text)
+    except (ValueError, TypeError):
+        return False
+    return True
 
 
 def _ms(s: float) -> float:
@@ -100,13 +110,12 @@ class Preflight:
                 resp = OpenCodeProvider().complete(MINIMAL_SYS, MINIMAL_JSON_PROBE)
                 dur = _ms(time.perf_counter() - t0)
                 payload = {"call": i, "duration_ms": dur, "text_len": len(resp.text), "provider": resp.provider, "model": resp.meta.get("model")}
-                try:
-                    json.loads(resp.text)
+                if response_contains_json(resp.text):
                     payload["valid_json"] = True
                     comp_ok = True
-                except json.JSONDecodeError as je:
+                else:
                     payload["valid_json"] = False
-                    payload["error"] = f"not JSON ({je})"
+                    payload["error"] = "no valid JSON object"
                     comp_ok = False
                 calls.append(payload)
             except Exception as exc:  # noqa: BLE001

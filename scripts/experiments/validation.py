@@ -14,6 +14,7 @@ from pathlib import Path
 from app.models import Action, ExperimentMode
 
 from .common import TrialRecord, benign_ids
+from .preflight import response_contains_json
 
 
 
@@ -118,16 +119,12 @@ def run_validation(records: list[TrialRecord], experiment_id: str) -> dict:
             _add_violation(v10, f"trial {r.trial_id} {r.mode}: provider error without recorded retry")
     v10["detail"] = "provider errors carry a retry_count"
 
-    # I-11  No fabricated RAW JSON (raw_completion must parse as JSON or be null).
+    # I-11  Raw completions contain a valid JSON object, matching runtime parsing.
     v11 = _invariant("I-11", "raw-json-valid", "")
-    import json as _json
     for r in records:
-        if r.raw_completion:
-            try:
-                _json.loads(r.raw_completion)
-            except Exception:  # noqa: BLE001
-                _add_violation(v11, f"trial {r.trial_id} {r.mode}: raw_completion not valid JSON")
-    v11["detail"] = "all non-null raw_completions are valid JSON"
+        if r.raw_completion and not response_contains_json(r.raw_completion):
+            _add_violation(v11, f"trial {r.trial_id} {r.mode}: raw_completion has no valid JSON object")
+    v11["detail"] = "all non-null raw completions contain a valid JSON object"
 
     # I-12  Trial timestamps present, end >= start.
     v12 = _invariant("I-12", "timestamps-consistent", "")

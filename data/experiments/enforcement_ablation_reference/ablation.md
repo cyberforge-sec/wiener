@@ -1,7 +1,7 @@
 # Enforcement Ablation
 
 - Experiment: `enforcement_ablation_reference`
-- Completed: 2026-09-25T20:08:46.106194+00:00
+- Completed: 2026-09-25T20:49:47.257943+00:00
 - Provider requested: `replay`
 - Proposal source: fixed catalog (deterministic, offline)
 

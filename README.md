@@ -6,6 +6,36 @@ WIENER is a sandboxed AI-vs-AI security proof of concept for evaluating how a po
 
 An LLM-assisted SOC Agent may propose an action from untrusted alert text. WIENER separates that **proposal** from **execution authority**: the SOC Agent proposes, while a deterministic Risk Engine and Policy Gate decide whether the simulated tool layer may act. Red AI provides adversarial input and Blue AI evaluates the resulting trajectory.
 
+> **WIENER uses a provider-agnostic cloud inference layer, allowing different
+> cloud LLM providers to be integrated through adapters while preserving the
+> same deterministic security and execution boundary.**
+
+In one line:
+
+```text
+MODEL CAN CHANGE      PROVIDER CAN CHANGE      INFERENCE CAN CHANGE
+                        ↓
+              EXECUTION AUTHORITY DOES NOT CHANGE
+```
+
+Swapping `provider: openai / model: gpt-4o-mini` for
+`provider: anthropic / model: claude-…` changes which model writes the SOC
+proposal and nothing else. Risk scoring, policy thresholds, action criticality,
+hard constraints, execution authorization and the executor re-check are
+identical, and the test suite asserts that invariance rather than asserting it
+in prose (`tests/test_provider_agnostic.py`).
+
+### Three separate things, so they are not confused
+
+| | What it is | Fixed? |
+| --- | --- | --- |
+| **Product architecture** | Provider-agnostic. Inference is an adapter behind a contract. | Never vendor-locked. |
+| **Default runtime** | Cloud first, local fallback, replay last resort. | The same ladder for every cloud. |
+| **Headline benchmark** | The 135-trial run was produced on one specific provider configuration. | An experiment setting, not a product limit. |
+
+A benchmark pinned to one model is a *measurement*. Requiring that model to
+run the product would be a *dependency*. Only the first is true here.
+
 ## 2. Architecture
 
 ```text
@@ -23,6 +53,21 @@ The provider ladder fails downward: cloud → local Ollama → deterministic
 `replay`. The cloud tier is a **pluggable adapter**, not a vendor: the same
 Risk Engine, Policy Gate, hard constraints and executor re-check run whichever
 model is behind it. The UI reports the tier actually used.
+
+Two evaluators, two different clouds, one identical ladder:
+
+```text
+cloud = OpenAI        cloud = OpenCode / Big Pickle
+      ↓                     ↓
+   OpenAI                OpenCode
+      ↓ fails              ↓ fails
+   Ollama                Ollama
+      ↓ fails              ↓ fails
+   Replay                Replay
+```
+
+The cloud slot is a single rung regardless of which adapter fills it, so the
+fallback order and the security pipeline are byte-identical in both cases.
 
 ## 3. Safety Boundary
 
@@ -389,7 +434,7 @@ The server binds `127.0.0.1` by default and has **no authentication**. Anyone wh
 
 Implemented: FastAPI API, Judge Mode, cloud/local/replay providers, Red AI loop, SOC/Blue/Risk/Policy pipeline, deterministic replay, tests, and simulated tools. Cloud and Ollama are the live-evaluation integrations; replay is offline setup verification. All tool execution and dashboard evidence are simulated/PoC artifacts. WIENER is not production-ready.
 
-See [architecture](docs/architecture.md), [setup notes](docs/competition_setup.md), [demo runbook](docs/DEMO_RUNBOOK.md), [contracts](docs/contracts.md), and [benchmark notes](docs/BENCHMARK.md).
+See [architecture](docs/architecture.md), [provider adapters](docs/PROVIDERS.md), [setup notes](docs/competition_setup.md), [demo runbook](docs/DEMO_RUNBOOK.md), [contracts](docs/contracts.md), and [benchmark notes](docs/BENCHMARK.md).
 
 ## 19. Evidence and Experiments
 

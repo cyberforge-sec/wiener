@@ -1,8 +1,8 @@
 {
   "experiment_id": "enforcement_ablation_reference",
   "experiment_type": "enforcement_ablation",
-  "completed_at": "2026-09-25T20:08:46.106194+00:00",
-  "created_at": "2026-09-26T03:08:46.106211+07:00",
+  "completed_at": "2026-09-25T20:49:47.257943+00:00",
+  "created_at": "2026-09-26T03:49:47.257960+07:00",
   "provider_requested": "replay",
   "proposal_source": "fixed catalog (deterministic, offline)",
   "scope": "Measures the enforcement layer only. Not comparable to, and never merged into, the authoritative 135-trial UAR/ASR/FIR/UAPR run.",
@@ -309,7 +309,7 @@
       "app/llm/anthropic_provider.py": "c326e8579f9c9e375f25f937e729a55512b4bb5560a30a594c0ac8e535893f85",
       "app/llm/base.py": "6cfebdd7e1f00ddf3381c7d1d599cd8104caad7f2c8e71b9c4c3983fb3276956",
       "app/llm/factory.py": "d2a260e12918ddb918de664003fb82b1222273eef285073c44c83eed87613da8",
-      "app/llm/identity.py": "90e58e30165c4975b3264a8c590ba40c40a0a667e4a6a9e033b2671569c230e0",
+      "app/llm/identity.py": "20a988f36956ce0b5506fbf3a5c1c0b5528f1afb0d50e0a8d4cfbd01040e927a",
       "app/llm/local_provider.py": "1d8afe6e39949dcab520df1b442188c7890dcf4a594c47f87704b3116c0a76a7",
       "app/llm/openai_compatible.py": "c5d3413a63ce513d62554a5a2646c87f12623cf4aa590f1f4517492f49fa629a",
       "app/llm/opencode_provider.py": "e35ac4198bbe628aa17b990fa7bff24f6cfda1515d0a68fa3f48edb2840c3f48",
@@ -347,8 +347,8 @@
       "scripts/experiments/metrics.py": "fab5ea0568d558a7f2c87225161d8c92fe130c9ccb7c8f2431da2878fb0dc1e2",
       "scripts/experiments/preflight.py": "858dc3ec12d437687628f03f60071fab2c6e9586feded777189dd67d4c79b58a",
       "scripts/experiments/run.py": "f31d4d603e2003ce1b6ea56699ed95e7e64df4e7bd18c6d8d75f7120a90c7a26",
-      "scripts/experiments/validation.py": "7841b8b54a2f919658306d903f950931b652bb96789ca99d4b2ac5a2b26c5767"
+      "scripts/experiments/validation.py": "ae63b2832e0b3b3c24ee0715189efa9dfd3eb4386428ff97dcf617ed3ad2e972"
     },
-    "root_hash": "83333eec2b8964225fc24e82358d905e247efbc2dac4ad326b38261ed269ae16"
+    "root_hash": "6a05397d1f5b1e62f7031edb4e9837c6db82f15c739a525437995e1007ec26b5"
   }
 }

@@ -30,7 +30,8 @@ adapters are implemented and tested:
   no `response_format` parameter. All of that translation stays inside the
   adapter.
 
-`WIENER_CLOUD_ADAPTER` selects between them. `LocalProvider` calls a
+`WIENER_CLOUD_ADAPTER` selects between them; `docs/PROVIDERS.md` is the
+contract for implementing another. `LocalProvider` calls a
 user-configured Ollama endpoint (preferring `/api/chat` so the system prompt
 keeps instruction priority) and `ReplayProvider` reads hash-keyed recorded
 responses. Ollama is the only directly implemented local runtime in this

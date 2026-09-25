@@ -520,3 +520,73 @@ def test_matching_ids_stay_reliable():
     )
     assert identity.model_identity_reliable is True
     assert identity.model_identity_note is None
+
+
+# --- the fallback chain is identical whoever the cloud is -----------------
+#
+# Two evaluators may configure completely different clouds. Both must get the
+# same downward ladder, because the ladder is a property of the tier, not of
+# the adapter behind it.
+
+
+@pytest.mark.parametrize(
+    "adapter,label",
+    [("openai_compatible", "openai"), ("anthropic", "anthropic")],
+)
+def test_fallback_order_is_identical_for_every_cloud_adapter(adapter, label, monkeypatch):
+    from app.llm import factory
+    from app.llm.factory import _STATIC_LADDER, _order_for
+
+    class Cfg:
+        CLOUD_ADAPTER = adapter
+        CLOUD_PROVIDER_LABEL = label
+
+    monkeypatch.setattr(factory, "config", Cfg())
+    assert _STATIC_LADDER == ("openai_compatible", "local", "replay")
+    # Whatever the cloud is, the downward order is the same...
+    assert _order_for("openai_compatible") == ["openai_compatible", "local", "replay"]
+    assert _order_for("opencode") == ["openai_compatible", "local", "replay"]
+    # ...and a local or replay preference still fails DOWNWARD only.
+    assert _order_for("local") == ["local", "replay"]
+    assert _order_for("replay") == ["replay"]
+
+
+def test_two_different_cloud_configurations_share_one_ladder(monkeypatch):
+    """The two worked examples: OpenAI-first and OpenCode-first evaluators.
+
+    Same tier, same fallbacks, same order. Only the service inside the cloud
+    slot differs.
+    """
+    from app.llm import factory
+
+    seen = []
+
+    def fake_build(name, *, strict_replay=False):
+        seen.append(name)
+        if name == "openai_compatible":
+            raise factory.ProviderUnavailable("unavailable", kind="unavailable")
+        if name == "local":
+            raise factory.ProviderUnavailable("unavailable", kind="connection")
+        return factory.ReplayProvider()
+
+    monkeypatch.setattr(factory, "_build", fake_build)
+    monkeypatch.setattr(factory, "ollama_reachable", lambda *a, **k: True)
+    # Register the real cache and cooldown for restoration: leaving a cached
+    # ReplayProvider behind would leak into every later test that inspects the
+    # active tier.
+    monkeypatch.setattr(factory, "_ACTIVE", None)
+    monkeypatch.setattr(factory, "_cloud_retry_after", 0.0)
+
+    for adapter, label in (("openai_compatible", "openai"), ("anthropic", "opencode")):
+        class Cfg:
+            CLOUD_ADAPTER = adapter
+            CLOUD_PROVIDER_LABEL = label
+            LLM_FORCE = ""
+            LOCAL_HOST = "http://localhost:11434"
+
+        monkeypatch.setattr(factory, "config", Cfg())
+        monkeypatch.setattr(factory, "_ACTIVE", None)
+        seen.clear()
+        provider = factory.get_llm()
+        assert provider.name == "replay", f"{label} config should fall back to replay"
+        assert seen == ["openai_compatible", "local", "replay"], seen

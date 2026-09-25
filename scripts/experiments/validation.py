@@ -205,10 +205,14 @@ def run_validation(records: list[TrialRecord], experiment_id: str) -> dict:
         _add_skipped(v13, f"{unchecked} trial(s) produced no action to check")
 
     # I-13b Model identity: the recorded model must be a model, not a transport
-    # name. Provider adapters report their own name ("opencode"/"local"), which
+    # name. Provider adapters report their own transport name, which
     # is not evidence of which model answered.
     v13b = _invariant("I-13b", "model-identity-recorded", "")
-    transport_names = {"opencode", "local", "replay", "degraded", "unknown", ""}
+    # Kept in step with app.llm.identity.TRANSPORT_NAMES so the evidence layer
+    # and the provider layer agree on what counts as a transport name.
+    from app.llm.identity import TRANSPORT_NAMES
+
+    transport_names = set(TRANSPORT_NAMES)
     wrong_model = 0
     for r in records:
         if r.fallback_used or r.error:

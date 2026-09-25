@@ -16,16 +16,55 @@ rechecks that authority and never touches real infrastructure.
 
 ## Provider layer
 
-`app/llm/factory.py` resolves the downward ladder `cloud → local → replay`
-(the legacy internal cloud ID is `opencode`). `OpenCodeProvider` calls a
-user-configured OpenAI-compatible cloud endpoint; it does not require an
-OpenCode account and can call direct OpenAI or another compatible gateway.
-`LocalProvider` calls a user-configured Ollama `/api/generate` endpoint; and
-`ReplayProvider` reads hash-keyed recorded responses. Ollama is the only
-directly implemented local runtime in this release; cloud and replay do not
-require it. The cloud key is never hardcoded. If a tier is unavailable, the next tier is tried; Judge Mode uses
-strict replay so a missing recording fails loudly rather than fabricating a
-live-looking answer.
+`app/llm/factory.py` resolves the downward ladder `cloud → local → replay`.
+
+The cloud tier is an **adapter behind a common contract**, not a vendor. Two
+adapters are implemented and tested:
+
+- `OpenAICompatibleProvider` (`app/llm/openai_compatible.py`) targets the
+  de-facto standard `POST {base_url}/chat/completions` shape, so one adapter
+  covers OpenAI and any OpenAI-compatible gateway.
+- `AnthropicProvider` (`app/llm/anthropic_provider.py`) targets the native
+  Messages API: `system` is a top-level parameter, auth is `x-api-key` plus a
+  version header, the response is a list of typed content blocks, and there is
+  no `response_format` parameter. All of that translation stays inside the
+  adapter.
+
+`WIENER_CLOUD_ADAPTER` selects between them. `LocalProvider` calls a
+user-configured Ollama endpoint (preferring `/api/chat` so the system prompt
+keeps instruction priority) and `ReplayProvider` reads hash-keyed recorded
+responses. Ollama is the only directly implemented local runtime in this
+release; cloud and replay do not require it. No credential is ever hardcoded.
+
+**The security path is provider-blind.** Trajectory, Blue AI, Risk Engine,
+Policy Gate and the Tool Executor contain no provider-name conditionals, and
+`tests/test_provider_agnostic.py` asserts that structurally as well as
+behaviourally: the same untrusted input and the same model output delivered
+over two different wire formats produce an identical risk score, decision,
+constraint set and execution outcome. Replacing the provider cannot create a
+new execution path.
+
+### Model identity is recorded, not inferred
+
+`app/llm/identity.py` keeps four facts apart, because collapsing any two of
+them produces a claim the artifact cannot support:
+
+| Field | Meaning |
+| --- | --- |
+| `provider` | the service addressed (provenance only, never routing) |
+| `adapter` | which adapter class spoke to it |
+| `requested_model` | the model id we asked for |
+| `provider_reported_model` | the model id the provider says it served |
+
+Gateways routinely rewrite the third into the fourth, and frequently report
+nothing. When nothing is reported, `model_identity_reliable` is false and the
+reason travels with the record; a missing identity is never filled in from the
+adapter name. Invariant `I-13b` independently rejects a transport name in a
+model field.
+
+If a tier is unavailable, the next tier is tried; Judge Mode uses strict replay
+so a missing recording fails loudly rather than fabricating a live-looking
+answer.
 
 ## Implemented modules
 

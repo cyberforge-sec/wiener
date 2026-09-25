@@ -8,7 +8,7 @@ import pytest
 
 from app.llm.base import ProviderUnavailable
 from app.llm.local_provider import LocalProvider
-from app.llm.opencode_provider import OpenCodeProvider
+from app.llm.openai_compatible import OpenAICompatibleProvider
 from app.llm.replay_provider import ReplayProvider
 from app.models import AgentEvent, SOCContext, SOCOutput
 from app.soc_agent.soc_agent import SOCAgent
@@ -56,14 +56,14 @@ def test_soc_agent_cloud_provider_response():
             return httpx.Response(200, json={"choices": [{"message": {"content": _VALID}}]})
         return httpx.Response(404)
 
-    provider = OpenCodeProvider(
+    provider = OpenAICompatibleProvider(
         api_key="key", base_url="https://example.invalid/v1", model="m",
         transport=httpx.MockTransport(handler),
     )
     agent = SOCAgent(provider)
     out, _, provider_name = agent.analyze(make_ctx())
     assert out.action == "block_ip"
-    assert provider_name == "opencode"
+    assert provider_name == "openai_compatible"
 
 
 def test_soc_agent_local_provider_response():

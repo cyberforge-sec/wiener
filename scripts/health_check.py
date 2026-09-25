@@ -9,7 +9,7 @@ Verifies the nine release-critical areas:
 
 Every area is checked without mutating project state (no log writes, no
 model calls). Cloud/Qwen unavailability is reported as WARN: the failover
-ladder (opencode -> local -> replay) is designed to keep the system fully
+ladder (cloud -> local -> replay) is designed to keep the system fully
 deterministic in that state. A FAIL means the release artifact is broken.
 
 Usage:
@@ -154,7 +154,8 @@ def check_dependencies():
 
 
 
-_VALID_FORCE = ("", "opencode", "local", "replay")
+# The cloud tier is provider-neutral; "opencode" stays accepted as a legacy alias.
+_VALID_FORCE = ("", "opencode", "openai_compatible", "cloud", "local", "replay")
 
 
 def check_configuration():

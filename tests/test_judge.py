@@ -61,16 +61,16 @@ def _reset_session() -> None:
 def test_resolve_cloud_first(monkeypatch):
     monkeypatch.setattr(
         llm_factory, "_build",
-        lambda name, *, strict_replay=False: _stance("opencode") if name == "opencode" else _stance("local"),
+        lambda name, *, strict_replay=False: _stance("openai_compatible") if name == "openai_compatible" else _stance("local"),
     )
     monkeypatch.setattr(llm_factory, "ollama_reachable", lambda *a, **k: True)
-    assert resolve_llm("opencode").name == "opencode"
-    assert resolve_llm("").name == "opencode"  # default ladder picks cloud
+    assert resolve_llm("opencode").name == "openai_compatible"
+    assert resolve_llm("").name == "openai_compatible"  # default ladder picks cloud
 
 
 def test_resolve_cloud_failure_falls_to_local(monkeypatch):
     def build(name, *, strict_replay=False):
-        if name == "opencode":
+        if name == "openai_compatible":
             raise ProviderUnavailable("no key", kind="auth")
         return _stance("local")
 
@@ -85,14 +85,14 @@ def test_resolve_cloud_and_local_failure_falls_to_replay(monkeypatch):
 
     monkeypatch.setattr(llm_factory, "_build", build)
     monkeypatch.setattr(llm_factory, "ollama_reachable", lambda *a, **k: False)
-    resolved = resolve_llm("opencode")
+    resolved = resolve_llm("openai_compatible")
     assert resolved.name == "replay"
 
 
 def test_resolve_local_failure_falls_to_replay(monkeypatch):
     def build(name, *, strict_replay=False):
         if name == "opencode":
-            return _stance("opencode")  # cloud is healthy
+            return _stance("openai_compatible")  # cloud is healthy
         raise ProviderUnavailable("simulated local failure")
 
     monkeypatch.setattr(llm_factory, "_build", build)
@@ -110,10 +110,10 @@ def test_resolve_replay_direct(monkeypatch):
 def test_resolve_unknown_provider_defaults_to_ladder(monkeypatch):
     monkeypatch.setattr(
         llm_factory, "_build",
-        lambda name, *, strict_replay=False: _stance("opencode") if name == "opencode" else _stance("local"),
+        lambda name, *, strict_replay=False: _stance("openai_compatible") if name == "openai_compatible" else _stance("local"),
     )
     monkeypatch.setattr(llm_factory, "ollama_reachable", lambda *a, **k: True)
-    assert resolve_llm("not-a-provider").name == "opencode"
+    assert resolve_llm("not-a-provider").name == "openai_compatible"
 
 
 

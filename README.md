@@ -20,9 +20,9 @@ Attacker / Input → SOC Agent → Trajectory Engine → Blue AI → Risk Engine
 - **Tool layer:** acts only after `ALLOW`, and labels every result simulated.
 
 The provider ladder fails downward: cloud → local Ollama → deterministic
-`replay`. `opencode` is only the legacy internal identifier for the cloud
-option; it does **not** require an OpenCode account or model. The UI reports
-the tier actually used.
+`replay`. The cloud tier is a **pluggable adapter**, not a vendor: the same
+Risk Engine, Policy Gate, hard constraints and executor re-check run whichever
+model is behind it. The UI reports the tier actually used.
 
 ## 3. Safety Boundary
 
@@ -64,13 +64,14 @@ live evaluation, choose Cloud or Local. Replay is for setup verification only:
 | Purpose | What you provide | `WIENER_LLM_FORCE` |
 | --- | --- | --- |
 | Setup smoke test / offline verification | Nothing beyond the application | `replay` |
-| **Live evaluation: cloud** | Your own OpenAI-compatible key, base URL, and model | `opencode` |
+| **Live evaluation: cloud** | Your own provider key, base URL, and model | `openai_compatible` |
 | **Live evaluation: local** | Ollama and a model installed on the same machine | `local` |
 | Automatic live selection | Configured cloud and/or local provider | empty |
 
-`opencode` is the legacy internal name for the cloud adapter; the UI labels it
-**Cloud (OpenAI-compatible)**. The checked-in `.env.example` is safe for setup:
-its cloud key is empty and its default is `replay`.
+`opencode` remains accepted as a legacy alias for the cloud tier, because older
+`.env` files and stored evidence use it; it is not a product requirement. The
+checked-in `.env.example` is safe for setup: its cloud key is empty and its
+default is `replay`.
 
 ## 6. Quick Start
 
@@ -150,7 +151,7 @@ For cloud mode, put the evaluator's real credentials in `.env` and explicitly
 select the cloud adapter:
 
 ```bash
-docker run --rm -p 8000:8000 --env-file .env -e WIENER_LLM_FORCE=opencode wiener:local
+docker run --rm -p 8000:8000 --env-file .env -e WIENER_LLM_FORCE=openai_compatible wiener:local
 ```
 
 For local Ollama in Docker, use the host gateway command in section 10. If a
@@ -160,19 +161,31 @@ into the image; `.dockerignore` excludes secrets, logs, and cache.
 
 ## 9. Cloud LLM Setup
 
-The cloud adapter uses an OpenAI-compatible chat-completions API. **OpenCode
-is not required.** Use direct OpenAI credentials or any provider/gateway that
-implements compatible `chat/completions`. The documented variables are
-`WIENER_CLOUD_*`; legacy `WIENER_OPENCODE_*` variables remain accepted only
-for backwards compatibility. Copy `.env.example` to `.env`, then replace the
-cloud key and, if needed, the URL/model with values belonging to the evaluator:
+The cloud tier is an **adapter behind a common contract**, so the inference
+provider is replaceable without touching a single security control. Two
+adapters are implemented and covered by the test suite:
+
+| `WIENER_CLOUD_ADAPTER` | Wire format | Notes |
+| --- | --- | --- |
+| `openai_compatible` (default) | `POST {base_url}/chat/completions` | Covers OpenAI and any OpenAI-compatible gateway (Groq, OpenRouter, …) by changing only base URL, key and model. |
+| `anthropic` | `POST {base_url}/v1/messages` | Native Messages API: `system` is a top-level parameter, auth is `x-api-key`, the response is typed content blocks, and there is no `response_format`. All of that is translated inside the adapter. |
+
+Switching provider changes **only** which model produced the SOC proposal. Risk
+scoring, thresholds, action criticality, hard constraints, execution
+authorization and the executor re-check are identical, and the test suite
+asserts that invariance directly (`tests/test_provider_agnostic.py`).
+
+The documented variables are `WIENER_CLOUD_*` plus `WIENER_ANTHROPIC_*`; legacy
+`WIENER_OPENCODE_*` variables remain accepted for backwards compatibility. Copy
+`.env.example` to `.env`, then set the key and, if needed, the URL/model to
+values belonging to the evaluator:
 
 ```env
 # Leave blank until you have a real key. Do not use a placeholder value.
 WIENER_CLOUD_API_KEY=
 WIENER_CLOUD_BASE_URL=https://api.openai.com/v1
 WIENER_CLOUD_MODEL=gpt-4o-mini
-WIENER_LLM_FORCE=opencode
+WIENER_LLM_FORCE=openai_compatible
 WIENER_LLM_TIMEOUT_S=30
 ```
 
@@ -201,18 +214,21 @@ same local `.env`:
 
 ```bash
 docker build -t wiener:local .
-docker run --rm -p 8000:8000 --env-file .env -e WIENER_LLM_FORCE=opencode wiener:local
+docker run --rm -p 8000:8000 --env-file .env -e WIENER_LLM_FORCE=openai_compatible wiener:local
 ```
 
 The old names remain accepted for backward compatibility, so this migration is
 recommended for clarity, not an emergency breaking change.
 
-| Cloud choice | Works now? | Notes |
-| --- | --- | --- |
-| OpenAI API | Yes | Configure its standard `/v1` base URL, key, and model. |
-| Any OpenAI-compatible provider/gateway | Yes | Configure that service's compatible base URL, key, and model. |
-| OpenCode | Optional | It is one possible compatible service, not a requirement. |
-| Native Anthropic or Gemini API | Not directly | Use an OpenAI-compatible gateway, or add a dedicated provider adapter. |
+Only providers that are actually implemented and tested are listed. An
+untested adapter is not claimed.
+
+| Cloud choice | Works now? | Adapter | Notes |
+| --- | --- | --- | --- |
+| OpenAI API | Yes | `openai_compatible` | Configure its standard `/v1` base URL, key, and model. |
+| Any OpenAI-compatible provider/gateway | Yes | `openai_compatible` | Configure that service's base URL, key, and model. Nothing else changes. |
+| Anthropic native Messages API | Yes | `anthropic` | Set `WIENER_CLOUD_ADAPTER=anthropic` and the `WIENER_ANTHROPIC_*` values. |
+| Gemini native API | Not yet | — | No dedicated adapter is implemented or tested. Use an OpenAI-compatible gateway, or add one behind the same contract. |
 
 ## 10. Local LLM Setup (Ollama)
 
@@ -283,8 +299,9 @@ does not have an API key or Ollama.
 ## 12. Judge Mode
 
 Start the server and open `/judge`. For the required live evaluation choose
-**Cloud** (legacy internal API value: `opencode`) or **Local (Ollama)**; these
-are alternatives, not two models that must run together. Use **Replay** only for
+**Cloud** or **Local (Ollama)**; these are alternatives, not two models that
+must run together. The Cloud entry runs whichever adapter
+`WIENER_CLOUD_ADAPTER` selects. Use **Replay** only for
 offline setup checks. Choose `normal`, `prompt_injection`, or `adaptive`, then
 select **Run**. **Replay** repeats the latest request and **Reset** clears
 state. Evaluators should inspect the actual provider tier, pipeline stages,

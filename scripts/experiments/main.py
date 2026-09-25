@@ -51,7 +51,7 @@ def plan(experiment_id: str, out_dir: Path) -> dict:
     cfg = {
         "experiment_id": experiment_id,
         "created_at": now_iso(),
-        "preflight_required": ["A1.opencode.credentials", "A1.opencode.handshake", "A1.opencode.model-served", "A1.opencode.minimal-completion", "A2.env.recorded", "A3.local.reachable", "A3.local.model-present", "A3.local.minimal-completion", "A4.replay.store", "A4.replay.deterministic", "A5.pipeline.live-smoke"],
+        "preflight_required": ["A1.cloud.credentials", "A1.cloud.handshake", "A1.cloud.model-catalog", "A1.cloud.minimal-completion", "A2.env.recorded", "A3.local.reachable", "A3.local.model-present", "A3.local.minimal-completion", "A4.replay.store", "A4.replay.deterministic", "A5.pipeline.live-smoke"],
         "modes": ["no_defense", "basic_prompt_defense", "wiener"],
         "num_benign_scenarios": 10,
         "num_malicious_variants": NUM_MALICIOUS_VARIANTS,
@@ -59,7 +59,8 @@ def plan(experiment_id: str, out_dir: Path) -> dict:
         "benign_per_mode": 10,
         "total_trials_per_mode": 45,
         "random_seed": config.MUTATION_SEED,
-        "provider": "opencode",
+        "provider": config.CLOUD_ADAPTER,
+        "provider_label": config.CLOUD_PROVIDER_LABEL,
         "model": config.CLOUD_MODEL,
         "endpoint_identifier": __import__("app.config", fromlist=["config"]).config.CLOUD_BASE_URL,
         "timeout_s": __import__("app.config", fromlist=["config"]).config.LLM_TIMEOUT_S,
@@ -82,7 +83,7 @@ def plan(experiment_id: str, out_dir: Path) -> dict:
         },
         "metric_version": "app.metrics.core + authoritative Wilson CI serialization v1",
         "provider_policy": {
-            "primary": "opencode",
+            "primary": "cloud (adapter selected by WIENER_CLOUD_ADAPTER)",
             "secondary": "local/qwen2.5:1.5b",
             "replay": "replay validation only",
             "fallback_recorded_in_provider_meta": True,

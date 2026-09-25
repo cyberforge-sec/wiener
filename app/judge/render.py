@@ -24,7 +24,9 @@ from .judge_mode import (
 )
 
 _PROVIDER_LABELS = {
-    "opencode": "Cloud (OpenAI-compatible)",
+    "openai_compatible": "Cloud (configurable adapter)",
+    # Legacy alias for the same tier; still selectable, still the same path.
+    "opencode": "Cloud (configurable adapter)",
     "local": "Local (Ollama)",
     "replay": "Replay",
 }

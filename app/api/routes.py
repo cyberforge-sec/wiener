@@ -264,7 +264,31 @@ def judge_reset() -> dict:
 
 @router.get("/judge/state")
 def judge_state() -> dict:
+    """Last committed run, so a page reload does not lose the judge's result.
+
+    Returns the rendered view alongside the metadata: the page cannot rebuild
+    the panel from summary fields, and re-running the scenario to recover it
+    would be a different request (a different slot) and therefore dishonest.
+    """
     session = get_session()
     if session.last is None:
         return {"last": None}
-    return {"last": run_to_meta(session.last)}
+    last = session.last
+    return {
+        "last": {
+            **run_to_meta(last),
+            "html": render_main_view(last),
+            "stopped_reason": last.stopped_reason,
+            "risk_score": last.result.risk.risk_score if last.result else None,
+            "tool_executed": last.result.tool_result.executed if last.result and last.result.tool_result else None,
+            "adaptive_trace": [
+                {
+                    "iteration": step.iteration,
+                    "decision": step.decision,
+                    "risk": step.risk,
+                    "kind": step.kind,
+                }
+                for step in last.adaptive_trace
+            ],
+        }
+    }

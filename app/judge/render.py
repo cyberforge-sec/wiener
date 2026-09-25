@@ -789,7 +789,13 @@ async function run(){busy(true);closeLive();clearActivity();var view=document.ge
 }
 async function replay(){busy(true);document.getElementById('status').textContent='Replaying the most recent request\u2026';try{show(await post('/judge/replay'))}finally{busy(false)}}
 async function reset(){busy(true);try{var response=await post('/judge/reset');var view=document.getElementById('main-view');document.getElementById('status').textContent=response.data.ok?'Ready. Choose a scenario and press Run Scenario.':'Reset failed.';view.className='';view.innerHTML='<div class="empty-state"><b>No run yet.</b>The live policy result will appear here after Run Scenario.</div>';resetPipeline()}finally{busy(false)}}
-document.getElementById('btn-run').addEventListener('click',run);document.getElementById('btn-replay').addEventListener('click',replay);document.getElementById('btn-reset').addEventListener('click',reset);
+/* Restore the last committed run after a reload. The server still holds it, so
+   a judge who refreshes (or demos from a fresh tab) must not silently lose the
+   result they were looking at. Nothing is re-executed: this only re-renders the
+   stored run, and the status line says so, so a restored verdict can never be
+   mistaken for a fresh one. */
+async function restoreLast(){try{var response=await fetch('/judge/state',{headers:{'Accept':'application/json'}});if(!response.ok)return;var payload=await response.json();var last=payload&&payload.last;if(!last||!last.html)return;var view=document.getElementById('main-view'),status=document.getElementById('status');view.className='';view.innerHTML=last.html;var shell=view.querySelector('.run-shell');var rid=document.getElementById('live-run-id');if(rid&&shell)rid.textContent=shell.getAttribute('data-run-id')||'-';var prov=document.getElementById('live-provider');if(prov)prov.textContent='Provider: '+(last.provider_used||last.requested_provider||'-');var scen=document.getElementById('live-scenario');if(scen)scen.textContent='Scenario: '+(last.scenario||'-');status.textContent='Showing the last completed run (restored, not re-executed) \\u00b7 Provider: '+(last.provider_used||last.requested_provider||'-')+' \\u00b7 Scenario: '+(last.scenario||'-')+' \\u00b7 Verdict: '+(last.decision_label||'no decision')}catch(_e){/* a failed restore must not break the page */}}
+document.getElementById('btn-run').addEventListener('click',run);document.getElementById('btn-replay').addEventListener('click',replay);document.getElementById('btn-reset').addEventListener('click',reset);restoreLast();
 '''
 
 

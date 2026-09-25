@@ -351,3 +351,37 @@ def test_judge_page_has_no_third_party_requests():
     assert len(resp.content) > 1000
     # Icons are inline SVG, so no webfont is needed for the UI chrome.
     assert "<svg" in html and 'class="ico' in html
+
+
+def test_state_endpoint_returns_the_rendered_last_run():
+    """A reload must not lose the judge's result: the page restores the stored
+    run, and it must be labelled as restored rather than freshly executed."""
+    _reset_session()
+    run = client.post("/judge/run", json={"provider": "replay", "scenario": "normal"})
+    assert run.status_code == 200
+
+    state = client.get("/judge/state")
+    assert state.status_code == 200
+    last = state.json()["last"]
+    assert last is not None
+    assert last["html"], "state must carry the rendered view, not only summary fields"
+    assert "run-shell" in last["html"]
+    assert last["decision"] is not None
+    assert last["scenario"] == "normal"
+    assert last["provider_used"]
+    # Risk and tool outcome travel with the restore, not just the verdict.
+    assert last["risk_score"] is not None
+    assert "tool_executed" in last
+
+    page = render_page()
+    assert "/judge/state" in page
+    assert "restoreLast" in page
+    assert "restored, not re-executed" in page
+
+
+def test_state_is_empty_after_reset():
+    _reset_session()
+    client.post("/judge/run", json={"provider": "replay", "scenario": "normal"})
+    assert client.get("/judge/state").json()["last"] is not None
+    client.post("/judge/reset")
+    assert client.get("/judge/state").json()["last"] is None

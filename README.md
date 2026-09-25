@@ -110,18 +110,19 @@ Never bake `.env`, keys, or models into the image; `.dockerignore` excludes secr
 
 The cloud adapter uses an OpenAI-compatible chat-completions API. **OpenCode
 is not required.** Use direct OpenAI credentials or any provider/gateway that
-implements compatible `chat/completions`; the `WIENER_OPENCODE_*` environment
-variable names are retained only for backwards compatibility. Copy
+implements compatible `chat/completions`. The documented variables are
+`WIENER_CLOUD_*`; legacy `WIENER_OPENCODE_*` variables remain accepted only
+for backwards compatibility. Copy
 `.env.example` to `.env` and insert credentials belonging to the evaluator:
 
 ```env
-WIENER_OPENCODE_API_KEY=your_api_key_here
-WIENER_OPENCODE_BASE_URL=https://your-provider.example/v1
-WIENER_OPENCODE_MODEL=your_supported_model
+WIENER_CLOUD_API_KEY=your_api_key_here
+WIENER_CLOUD_BASE_URL=https://your-provider.example/v1
+WIENER_CLOUD_MODEL=your_supported_model
 WIENER_LLM_TIMEOUT_S=30
 ```
 
-`WIENER_OPENCODE_TEMPERATURE` and `WIENER_OPENCODE_RESPONSE_FORMAT` are optional. An empty key skips cloud; an unavailable cloud tier falls to local then replay. Do not commit `.env`.
+`WIENER_CLOUD_TEMPERATURE` and `WIENER_CLOUD_RESPONSE_FORMAT` are optional. An empty key skips cloud; an unavailable cloud tier falls to local then replay. Do not commit `.env`.
 
 | Cloud choice | Works now? | Notes |
 | --- | --- | --- |

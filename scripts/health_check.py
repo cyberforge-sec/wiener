@@ -204,11 +204,11 @@ def check_configuration():
 def check_cloud():
     from app.config import config
 
-    has_key = bool(config.OPENCODE_API_KEY.strip())
-    fields_ok = bool(config.OPENCODE_BASE_URL.strip()) and bool(config.OPENCODE_MODEL.strip())
+    has_key = bool(config.CLOUD_API_KEY.strip())
+    fields_ok = bool(config.CLOUD_BASE_URL.strip()) and bool(config.CLOUD_MODEL.strip())
     detail = (
-        f"key={'set' if has_key else 'unset'} base_url={config.OPENCODE_BASE_URL} "
-        f"model={config.OPENCODE_MODEL}"
+        f"key={'set' if has_key else 'unset'} base_url={config.CLOUD_BASE_URL} "
+        f"model={config.CLOUD_MODEL}"
     )
 
     if not has_key:
@@ -227,11 +227,11 @@ def check_cloud():
         import socket
         from urllib.parse import urlparse
 
-        parsed = urlparse(config.OPENCODE_BASE_URL)
+        parsed = urlparse(config.CLOUD_BASE_URL)
         host, port = parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80)
         sock = socket.create_connection((host, port), timeout=5)
         sock.close()
-        return True, False, f"endpoint {config.OPENCODE_BASE_URL} reachable"
+        return True, False, f"endpoint {config.CLOUD_BASE_URL} reachable"
 
     if has_key and fields_ok:
         _run("cloud-provider", "endpoint-reachable", _probe)

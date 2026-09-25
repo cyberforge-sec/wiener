@@ -59,10 +59,10 @@ def plan(experiment_id: str, out_dir: Path) -> dict:
         "total_trials_per_mode": 45,
         "random_seed": RANDOM_SEED,
         "provider": "opencode",
-        "model": __import__("app.config", fromlist=["config"]).config.OPENCODE_MODEL,
-        "endpoint_identifier": __import__("app.config", fromlist=["config"]).config.OPENCODE_BASE_URL,
+        "model": __import__("app.config", fromlist=["config"]).config.CLOUD_MODEL,
+        "endpoint_identifier": __import__("app.config", fromlist=["config"]).config.CLOUD_BASE_URL,
         "timeout_s": __import__("app.config", fromlist=["config"]).config.LLM_TIMEOUT_S,
-        "response_format": __import__("app.config", fromlist=["config"]).config.OPENCODE_RESPONSE_FORMAT,
+        "response_format": __import__("app.config", fromlist=["config"]).config.CLOUD_RESPONSE_FORMAT,
         "risk_thresholds": {
             "allow": __import__("app.config", fromlist=["config"]).config.RISK_ALLOW_THRESHOLD,
             "review": __import__("app.config", fromlist=["config"]).config.RISK_REVIEW_THRESHOLD,

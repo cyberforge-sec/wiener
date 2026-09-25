@@ -28,21 +28,31 @@ def _load_dotenv(path: Path) -> None:
 _load_dotenv(_PROJECT_ROOT / ".env")
 
 
+def _env(primary: str, legacy: str, default: str = "") -> str:
+    """Read the public cloud setting, with a non-breaking legacy fallback.
+
+    ``WIENER_CLOUD_*`` is the documented provider-neutral interface. The
+    historical ``WIENER_OPENCODE_*`` spelling remains readable so existing
+    local deployments continue to work, but it is never required.
+    """
+    return os.getenv(primary, os.getenv(legacy, default))
+
+
 @dataclass(frozen=True)
 class Config:
     LLM_FORCE: str = os.getenv("WIENER_LLM_FORCE", "")  # opencode | local | replay | ""
     LLM_TIMEOUT_S: float = float(os.getenv("WIENER_LLM_TIMEOUT_S", "30"))
 
-    OPENCODE_API_KEY: str = os.getenv("WIENER_OPENCODE_API_KEY", "")
-    OPENCODE_BASE_URL: str = os.getenv("WIENER_OPENCODE_BASE_URL", "https://api.openai.com/v1")
-    OPENCODE_MODEL: str = os.getenv("WIENER_OPENCODE_MODEL", "gpt-4o-mini")
+    CLOUD_API_KEY: str = _env("WIENER_CLOUD_API_KEY", "WIENER_OPENCODE_API_KEY")
+    CLOUD_BASE_URL: str = _env("WIENER_CLOUD_BASE_URL", "WIENER_OPENCODE_BASE_URL", "https://api.openai.com/v1")
+    CLOUD_MODEL: str = _env("WIENER_CLOUD_MODEL", "WIENER_OPENCODE_MODEL", "gpt-4o-mini")
     # Strict/small models become more predictable at lower temperature.
-    OPENCODE_TEMPERATURE: float = float(os.getenv("WIENER_OPENCODE_TEMPERATURE", "0.0"))
+    CLOUD_TEMPERATURE: float = float(_env("WIENER_CLOUD_TEMPERATURE", "WIENER_OPENCODE_TEMPERATURE", "0.0"))
     # Force structured JSON decoding when supported; empty disables.
-    OPENCODE_RESPONSE_FORMAT: str = os.getenv("WIENER_OPENCODE_RESPONSE_FORMAT", "json_object")
+    CLOUD_RESPONSE_FORMAT: str = _env("WIENER_CLOUD_RESPONSE_FORMAT", "WIENER_OPENCODE_RESPONSE_FORMAT", "json_object")
     # Raw provider response diagnostics (null vs truncation vs prose); empty disables.
     # Disabled by default because responses can be sensitive operational data.
-    OPENCODE_DIAG_PATH: str = os.getenv("WIENER_OPENCODE_DIAG_PATH", "")
+    CLOUD_DIAG_PATH: str = _env("WIENER_CLOUD_DIAG_PATH", "WIENER_OPENCODE_DIAG_PATH")
 
     LOCAL_HOST: str = os.getenv("WIENER_LOCAL_HOST", "http://localhost:11434")
     LOCAL_MODEL: str = os.getenv("WIENER_LOCAL_MODEL", "qwen2.5:1.5b")

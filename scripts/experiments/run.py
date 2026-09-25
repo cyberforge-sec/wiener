@@ -135,7 +135,7 @@ def run_trial_via_agent(
             rec.duration_ms = round((time.perf_counter() - t0) * 1000, 3)
             sock = result.trajectory.proposed_action
             rec.provider_used = result.trajectory.provider_used
-            rec.model = config.OPENCODE_MODEL
+            rec.model = config.CLOUD_MODEL
             rec.blue_assessment = result.assessment.model_dump()
             rec.blue_route = result.assessment.route.value
             rec.risk_score = result.risk.risk_score

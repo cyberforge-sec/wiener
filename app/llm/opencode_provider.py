@@ -25,7 +25,7 @@ class OpenCodeProvider:
     """Cloud LLM provider (OpenAI-compatible chat completions endpoint).
 
     Configuration comes from environment/config, never hardcoded:
-      WIENER_OPENCODE_API_KEY / BASE_URL / MODEL / TEMPERATURE /
+      WIENER_CLOUD_API_KEY / BASE_URL / MODEL / TEMPERATURE /
       RESPONSE_FORMAT, LLM_TIMEOUT_S.
     Raises ProviderUnavailable with a normalized `kind` on failure.
 
@@ -47,20 +47,20 @@ class OpenCodeProvider:
         transport: httpx.BaseTransport | None = None,
         diag_path: str | None = None,
     ) -> None:
-        self._api_key = api_key if api_key is not None else config.OPENCODE_API_KEY
-        self._base_url = base_url if base_url is not None else config.OPENCODE_BASE_URL
-        self._model = model if model is not None else config.OPENCODE_MODEL
+        self._api_key = api_key if api_key is not None else config.CLOUD_API_KEY
+        self._base_url = base_url if base_url is not None else config.CLOUD_BASE_URL
+        self._model = model if model is not None else config.CLOUD_MODEL
         self._timeout_s = timeout_s if timeout_s is not None else config.LLM_TIMEOUT_S
         self._temperature = (
-            temperature if temperature is not None else config.OPENCODE_TEMPERATURE
+            temperature if temperature is not None else config.CLOUD_TEMPERATURE
         )
         self._response_format = (
             response_format
             if response_format is not None
-            else config.OPENCODE_RESPONSE_FORMAT
+            else config.CLOUD_RESPONSE_FORMAT
         )
         self._transport = transport
-        diag = diag_path if diag_path is not None else config.OPENCODE_DIAG_PATH
+        diag = diag_path if diag_path is not None else config.CLOUD_DIAG_PATH
         self._diag_path = Path(diag).expanduser() if diag else None
         if self._diag_path is not None and not self._diag_path.is_absolute():
             self._diag_path = Path(__file__).resolve().parent.parent.parent / self._diag_path

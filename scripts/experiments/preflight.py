@@ -47,12 +47,12 @@ class Preflight:
         )
 
     def a1_gateway(self) -> None:
-        base = config.OPENCODE_BASE_URL
-        model = config.OPENCODE_MODEL
-        key_set = bool(config.OPENCODE_API_KEY)
+        base = config.CLOUD_BASE_URL
+        model = config.CLOUD_MODEL
+        key_set = bool(config.CLOUD_API_KEY)
 
         if not key_set:
-            self.add("A1", "opencode.credentials", False, "WIENER_OPENCODE_API_KEY is not set")
+            self.add("A1", "cloud.credentials", False, "WIENER_CLOUD_API_KEY is not set")
             return
 
         # 1) reachability + handshake via /chat/completions (the real surface)
@@ -62,7 +62,7 @@ class Preflight:
         try:
             r = httpx.post(
                 f"{base.rstrip('/')}/chat/completions",
-                headers={"Authorization": f"Bearer {config.OPENCODE_API_KEY}"},
+                headers={"Authorization": f"Bearer {config.CLOUD_API_KEY}"},
                 json={"model": model, "messages": [{"role": "user", "content": MINIMAL_USER}], "temperature": 0.0, "max_tokens": 5},
                 timeout=config.LLM_TIMEOUT_S,
             )
@@ -123,12 +123,12 @@ class Preflight:
     def a2_env(self) -> None:
         cfg = {
             "provider": "opencode",
-            "base_url": config.OPENCODE_BASE_URL,
-            "model": config.OPENCODE_MODEL,
+            "base_url": config.CLOUD_BASE_URL,
+            "model": config.CLOUD_MODEL,
             "timeout_s": config.LLM_TIMEOUT_S,
-            "response_format": config.OPENCODE_RESPONSE_FORMAT,
-            "api_key_set": bool(config.OPENCODE_API_KEY),
-            "temperature": config.OPENCODE_TEMPERATURE,
+            "response_format": config.CLOUD_RESPONSE_FORMAT,
+            "api_key_set": bool(config.CLOUD_API_KEY),
+            "temperature": config.CLOUD_TEMPERATURE,
             "llm_force": config.LLM_FORCE,
         }
         self.add("A2", "env.recorded", True, "provider/base_url/model/timeout/response_format/credentials presence recorded", cfg)

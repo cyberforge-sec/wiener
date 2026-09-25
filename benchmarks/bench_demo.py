@@ -128,10 +128,10 @@ def warm_start(runs: int) -> dict:
 
 
 def _cloud_available() -> str | None:
-    if not config.OPENCODE_API_KEY:
+    if not config.CLOUD_API_KEY:
         return "no API key"
     try:
-        resp = httpx.get(f"{config.OPENCODE_BASE_URL.rstrip('/')}/models", timeout=5)
+        resp = httpx.get(f"{config.CLOUD_BASE_URL.rstrip('/')}/models", timeout=5)
         return None if resp.status_code == 200 else f"HTTP {resp.status_code}"
     except httpx.HTTPError as exc:
         return f"unreachable ({exc})"
@@ -151,12 +151,12 @@ def cloud_soc_latency(runs: int) -> dict | None:
 
 def cloud_streaming_probe() -> dict | None:
     """First-token latency + total generation (streaming): best effort."""
-    if not config.OPENCODE_API_KEY:
+    if not config.CLOUD_API_KEY:
         return None
-    url = f"{config.OPENCODE_BASE_URL.rstrip('/')}/chat/completions"
-    headers = {"Authorization": f"Bearer {config.OPENCODE_API_KEY}"}
+    url = f"{config.CLOUD_BASE_URL.rstrip('/')}/chat/completions"
+    headers = {"Authorization": f"Bearer {config.CLOUD_API_KEY}"}
     payload = {
-        "model": config.OPENCODE_MODEL,
+        "model": config.CLOUD_MODEL,
         "messages": [
             {"role": "system", "content": _SOC_SYSTEM},
             {"role": "user", "content": _SOC_USER},

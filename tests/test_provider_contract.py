@@ -314,3 +314,52 @@ def test_replay_provider_works_offline_without_live_model():
         resp = provider.complete(SYSTEM, USER)
         assert resp.provider == "replay"
         assert resp.text
+
+def _local_chat_transport(recorder: list[dict]):
+    """Ollama with /api/chat support. Records every request it receives."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content or b"{}")
+        recorder.append({"path": request.url.path, "body": body})
+        if request.url.path.endswith("/api/chat"):
+            return httpx.Response(200, json={"message": {"content": _GOOD_RESPONSE_TEXT}})
+        return httpx.Response(404)
+
+    return httpx.MockTransport(handler)
+
+
+def test_local_provider_uses_real_role_separation_when_available():
+    """System and user must stay separate messages: concatenating them lets
+    untrusted alert text share the instruction's position."""
+    seen: list[dict] = []
+    provider = LocalProvider(
+        host="http://example.invalid", model="qwen",
+        transport=_local_chat_transport(seen),
+    )
+
+    resp = provider.complete(SYSTEM, USER)
+
+    chat_calls = [c for c in seen if c["path"].endswith("/api/chat") and "messages" in c["body"]]
+    assert chat_calls, "expected an /api/chat call with messages"
+    roles = [m["role"] for m in chat_calls[0]["body"]["messages"]]
+    assert roles == ["system", "user"]
+    assert chat_calls[0]["body"]["messages"][0]["content"] == SYSTEM
+    assert chat_calls[0]["body"]["messages"][1]["content"] == USER
+    assert resp.text == _GOOD_RESPONSE_TEXT
+    assert resp.meta["role_separation"] is True
+    assert resp.meta["endpoint"] == "api/chat"
+
+
+def test_local_provider_falls_back_to_flattened_prompt_and_says_so():
+    """An older server without /api/chat still works, but the response must
+    record that role separation was NOT available."""
+    provider = LocalProvider(
+        host="http://example.invalid", model="qwen",
+        transport=_local_transport(),
+    )
+
+    resp = provider.complete(SYSTEM, USER)
+
+    assert resp.text == _GOOD_RESPONSE_TEXT
+    assert resp.meta["endpoint"] == "api/generate"
+    assert resp.meta["role_separation"] is False

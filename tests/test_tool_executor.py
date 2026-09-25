@@ -80,13 +80,39 @@ def test_simulated_only_flag_on_every_execution(action, target, _):
     assert "simulated" in res.detail
 
 
-def test_refusal_of_unsupported_action():
-    # isolate_endpoint has no simulated tool in the minimum set.
+def test_isolate_endpoint_is_simulated_not_unsupported():
+    """isolate_endpoint is a first-class dangerous action (seeds target it and
+    safety constraints cover it), so the executor must be able to simulate it.
+    An ALLOWed proposal may not degrade into a silent UNSUPPORTED no-op."""
     res = _executor().execute(_allow("isolate_endpoint", "host-a"), _output("isolate_endpoint", "host-a"))
-    assert res.executed is False
-    assert res.status == ToolStatus.UNSUPPORTED
-    assert res.event is None
-    assert "no simulated tool" in res.detail
+    assert res.executed is True
+    assert res.status == ToolStatus.OK
+    assert res.event is not None
+    assert res.event.raw_payload["simulated"] is True
+    assert "simulated" in res.detail
+
+
+def test_every_action_in_the_vocabulary_has_a_simulated_tool():
+    """Vocabulary and executor must agree.
+
+    An action the model can propose but the executor cannot simulate used to
+    return UNSUPPORTED even when the gate allowed it, which reads as a
+    prevention win that never happened.
+    """
+    from app.models import Action
+
+    executor = _executor()
+    missing = [
+        action.value
+        for action in Action
+        if Action(action) not in executor._handlers
+    ]
+    assert missing == []
+    for action in Action:
+        res = executor.execute(_allow(action.value, "host-a"), _output(action.value, "host-a"))
+        assert res.status == ToolStatus.OK, action
+        assert res.executed is True, action
+        assert res.event is not None and res.event.raw_payload["simulated"] is True
 
 
 def test_policy_gate_blocks_before_simulated_execution():
@@ -166,3 +192,19 @@ def test_pipeline_logs_tool_result(tmp_path):
     assert entry.tool_result is not None
     assert entry.tool_result.executed is True
     assert entry.tool_result.event.raw_payload["simulated"] is True
+
+def test_isolate_endpoint_executor_and_vocabulary_agree():
+    """Regression for the silent UNSUPPORTED degradation: an allowed
+    isolate_endpoint must be simulated, not dropped."""
+    ex = _executor()
+    res = ex.execute(_allow("isolate_endpoint", "host-a"), _output("isolate_endpoint", "host-a"))
+    assert res.executed is True
+    assert res.status == ToolStatus.OK
+    assert "simulated" in res.detail
+    # And it is still gated like anything else.
+    blocked = ex.execute(
+        PolicyDecision(decision=Decision.BLOCK, reason_tags=["t"], constraint_ids=[]),
+        _output("isolate_endpoint", "host-a"),
+    )
+    assert blocked.executed is False
+    assert blocked.status == ToolStatus.REFUSED_BLOCK

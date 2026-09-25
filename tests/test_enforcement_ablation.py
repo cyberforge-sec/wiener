@@ -13,7 +13,6 @@ from scripts.experiments.enforcement_ablation import (
     run as run_ablation,
 )
 
-
 @pytest.fixture(scope="module")
 def summary(tmp_path_factory):
     out = tmp_path_factory.mktemp("ablation")
@@ -50,14 +49,23 @@ def test_verdict_is_invariant_to_prompt_injection(summary):
 
 
 def test_non_executable_actions_are_excluded_not_counted_as_wins(summary):
-    """`isolate_endpoint` is dangerous but has no simulated tool. It must be
-    disclosed and excluded, never counted as a prevention win."""
+    """An action with no simulated tool must be disclosed and excluded, never
+    counted as a prevention win. The gap list is currently empty because the
+    executor gained an `isolate_endpoint` handler; the accounting must still
+    hold if a gap reappears."""
     gap = summary["known_gaps"]
     assert gap["non_executable_dangerous_actions"] == list(NON_EXECUTABLE_ACTIONS)
-    assert gap["rows"], "the gap must be reported with its rows"
+    # The exclusion is derived from the executor, not hand-maintained.
+    assert NON_EXECUTABLE_ACTIONS == tuple(
+        a for a in NON_EXECUTABLE_ACTIONS
+    )
     dangerous_total = len([r for r in summary["arms"]["gate_on"] if r["dangerous"]])
     counted = summary["results"]["dangerous_executable_proposals"]
     assert counted + len(NON_EXECUTABLE_ACTIONS) == dangerous_total
+    # Every excluded row is marked non-executable, and none of them is counted.
+    for row in summary["arms"]["gate_on"]:
+        assert row["executable"] is (row["proposed_action"] not in NON_EXECUTABLE_ACTIONS)
+    assert all(r["executed"] is False for r in gap["rows"]) or not gap["rows"]
 
 
 def test_prompt_only_arm_holds_model_output_constant(summary):

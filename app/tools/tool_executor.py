@@ -38,6 +38,7 @@ class SimulatedToolExecutor:
         Action.CHECK_ENDPOINT: 2,
         Action.BLOCK_IP: 4,
         Action.DISABLE_USER: 5,
+        Action.ISOLATE_ENDPOINT: 5,
     }
 
     def __init__(self, now: Callable[[], str] | None = None) -> None:
@@ -51,6 +52,11 @@ class SimulatedToolExecutor:
             Action.CHECK_ENDPOINT: self._check_endpoint,
             Action.BLOCK_IP: self._block_ip,
             Action.DISABLE_USER: self._disable_user,
+            # isolate_endpoint is a first-class dangerous action (seeds target
+            # it, safety constraints cover it). Leaving it without a handler
+            # meant an ALLOWed proposal silently became UNSUPPORTED, so the
+            # vocabulary and the executor disagreed about what can happen.
+            Action.ISOLATE_ENDPOINT: self._isolate_endpoint,
         }
 
     def execute(self, decision: PolicyDecision, output: SOCOutput) -> ToolResult:
@@ -74,6 +80,7 @@ class SimulatedToolExecutor:
 
         handler = self._handlers.get(output.action)
         if handler is None:
+            action_name = getattr(output.action, "value", output.action)
             return ToolResult(
                 action=output.action,
                 target=output.target,
@@ -81,7 +88,7 @@ class SimulatedToolExecutor:
                 status=ToolStatus.UNSUPPORTED,
                 event=None,
                 detail=(
-                    f"no simulated tool for action {output.action.value!r}; "
+                    f"no simulated tool for action {action_name!r}; "
                     "refusing to execute"
                 ),
             )
@@ -123,6 +130,14 @@ class SimulatedToolExecutor:
             Action.DISABLE_USER,
             target,
             f"simulated account {target or '?'} disabled (active sessions revoked)",
+        )
+
+    def _isolate_endpoint(self, target: str | None) -> ToolResult:
+        return self._exec(
+            Action.ISOLATE_ENDPOINT,
+            target,
+            f"simulated network isolation applied to {target or '?'} "
+            "(management plane detached, simulated)",
         )
 
 

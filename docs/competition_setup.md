@@ -22,13 +22,13 @@ deterministic evaluation. The API health endpoint is `/health`.
 
 Cloud is optional and is supplied by the evaluator through `.env`. OpenCode is
 not required: direct OpenAI and any OpenAI-compatible provider/gateway work
-with the existing cloud adapter. The `WIENER_OPENCODE_*` names are legacy
-environment-variable names, not a vendor requirement:
+with the existing cloud adapter. Use the provider-neutral `WIENER_CLOUD_*`
+variables; the old `WIENER_OPENCODE_*` names are compatibility fallbacks only:
 
 ```env
-WIENER_OPENCODE_API_KEY=your_api_key_here
-WIENER_OPENCODE_BASE_URL=https://your-provider.example/v1
-WIENER_OPENCODE_MODEL=your_supported_model
+WIENER_CLOUD_API_KEY=your_api_key_here
+WIENER_CLOUD_BASE_URL=https://your-provider.example/v1
+WIENER_CLOUD_MODEL=your_supported_model
 ```
 
 Ollama is optional for the overall application, but it is required when using

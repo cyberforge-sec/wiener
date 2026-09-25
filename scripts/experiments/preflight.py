@@ -277,7 +277,12 @@ class Preflight:
         )
 
     def summary(self) -> dict:
-        # Every required item is a hard gate; model-catalog is not (router serves oc/*).
+        # Every required item is a hard gate. Two are deliberately NOT:
+        #   - cloud.model-catalog: a router legitimately serves ids it does not
+        #     advertise, so absence from /models is not a fault.
+        #   - cloud.model-identity when the operator passed
+        #     --allow-unverifiable-identity: that run is knowingly a CANDIDATE,
+        #     and the check records `overridden: true` so the artifact says so.
         hard = [
             "cloud.credentials",
             "cloud.handshake",
@@ -290,7 +295,12 @@ class Preflight:
             "replay.deterministic",
             "pipeline.live-smoke",
         ]
-        hard_failed = [c for c in self.checks if c["check"] in hard and not c["ok"]]
+        hard_set = set(hard) | {"cloud.model-identity"}
+        hard_failed = [
+            c
+            for c in self.checks
+            if c["check"] in hard_set and not c["ok"] and not c.get("overridden")
+        ]
         all_ok = all(c["ok"] for c in self.checks)
         blocked = bool(hard_failed)
         reasons = [c["detail"] for c in self.checks if not c["ok"]]

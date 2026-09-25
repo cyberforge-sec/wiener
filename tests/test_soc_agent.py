@@ -40,6 +40,16 @@ def test_soc_agent_suspicious_alert_proposes_isolation():
     assert provider == "fake"
 
 
+def test_soc_agent_accepts_padded_action_value():
+    llm = FakeLLM(responses=['{"action": " get_logs ", "confidence": 0.8}'])
+    agent = SOCAgent(llm)
+
+    out, _, provider = agent.analyze(make_ctx())
+
+    assert out.action == "get_logs"
+    assert provider == "fake"
+
+
 def test_soc_agent_cloud_provider_response():
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/chat/completions"):

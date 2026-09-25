@@ -20,12 +20,12 @@ docker build -t wiener:local .
 
 ## Evidence provenance
 
-The authoritative metrics are preserved from the recorded 135-trial run. The
-manifest's `source_provenance` field compares the recorded code fingerprint
-with the current source tree. It currently reports `STALE` because the run was
-recorded before the current `main` source changes. This is intentional and
-visible in the dashboard; the stored metrics are not presented as a
-current-code run. A current-code lock requires rerunning the experiment.
+The authoritative run is `authoritative_20260925_zero_degraded`: 135 live
+trials, validation 16/16 PASS, zero degraded provider results, and nine recorded
+provider retries. Its manifest reports `source_provenance: MATCH`, so the code
+fingerprint matches the current `main` source tree. The earlier
+`authoritative_20260912_clean_2252` run remains available as historical
+evidence and is not presented as the current-code result.
 
 ## Change policy
 

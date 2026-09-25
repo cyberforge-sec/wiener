@@ -76,9 +76,10 @@ class SOCAgent:
             raise ValueError(f"unexpected model fields: {sorted(unexpected)}")
 
         raw_action = data.get("action")
-        if not isinstance(raw_action, str) or raw_action not in Action._value2member_map_:
+        normalized_action = raw_action.strip() if isinstance(raw_action, str) else raw_action
+        if not isinstance(normalized_action, str) or normalized_action not in Action._value2member_map_:
             raise ValueError(f"unknown or missing action proposed: {raw_action!r}")
-        action = Action(raw_action)
+        action = Action(normalized_action)
 
         raw_target = data.get("target")
         target = raw_target.strip() if isinstance(raw_target, str) else raw_target

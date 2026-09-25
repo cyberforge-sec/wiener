@@ -50,6 +50,35 @@ _DECISION_NOTES = {
 
 _STAGE_ICONS = {k: meta["icon"] for k, meta in STAGES.items()}
 
+# Inline SVG icon sprite. The Judge page used to load the Material Symbols
+# webfont from fonts.googleapis.com, which (a) breaks the demo offline and
+# (b) executes third-party CSS on every page view. Icons are now local,
+# inline, and font-independent. Paths are Material Design icons (Apache-2.0).
+_ICON_SPRITE: dict[str, str] = {
+    "shield": "M12,1L3,5v6c0,5.55 3.84,10.74 9,12 5.16,-1.26 9,-6.45 9,-12V5L12,1z",
+    "smart_toy": "M20,2H4C2.9,2 2,2.9 2,4v18l4,-4h14c1.1,0 2,-0.9 2,-2V4C22,2.9 21.1,2 20,2zM7,9h10v2H7V9zM7,13h7v2H7V13z",
+    "route": "M16,17.01V10h-2v7.01h-3L15,21l4,-3.99h-3zM9,3L5,6.99h3V14h2V6.99h3L9,3z",
+    "verified": "M12,1L3,5v6c0,5.55 3.84,10.74 9,12 5.16,-1.26 9,-6.45 9,-12V5L12,1zm-2,16l-4,-4 1.41,-1.41L10,14.17l6.59,-6.59L18,9l-8,8z",
+    "speed": "M1,21h22L12,2 1,21zm12,-3h-2v-2h2v2zm0,-4h-2v-4h2v4z",
+    "gavel": "M12,2l3,3-3,3-3,-3 3,-3zM5,11l3,-3 3,3-3,3-3,-3zM2,20h20v2H2v-2z",
+    "terminal": "M9.4,16.6L4.8,12l4.6,-4.6L8,6l-6,6 6,6 1.4,-1.4zm5.2,0l4.6,-4.6 -4.6,-4.6L16,6l6,6 -6,6 -1.4,-1.4z",
+    "expand_more": "M16.59,8.59L12,13.17 7.41,8.59 6,10l6,6 6,-6z",
+    "play_arrow": "M8,5v14l11,-7z",
+    "refresh": "M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -8,8s3.57,8 8,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z",
+    "replay": "M13,3c-4.97,0 -9,4.03 -9,9H1l3.89,3.89 0.07,0.14L9,12H6c0,-3.87 3.13,-7 7,-7s7,3.13 7,7 -3.13,7 -7,7c-1.93,0 -3.68,-0.79 -4.94,-2.06l-1.42,1.42C8.27,19.99 10.51,21 13,21c4.97,0 9,-4.03 9,-9s-4.03,-9 -9,-9z",
+}
+
+
+def _icon(name: str, css_class: str = "ico", title: str = "") -> str:
+    """Inline SVG icon from the local sprite (no webfont, no network)."""
+    path = _ICON_SPRITE.get(name, _ICON_SPRITE["shield"])
+    label = f'<title>{_esc(title)}</title>' if title else ""
+    return (
+        f'<svg class="{_esc(css_class)}" viewBox="0 0 24 24" aria-hidden="true" '
+        f'focusable="false">{label}<path d="{path}"/></svg>'
+    )
+
+
 assert set(STAGES) == set(LIVE_STAGE_ORDER), "STAGES keys must match LIVE_STAGE_ORDER"
 
 
@@ -119,7 +148,7 @@ def _stage(
     status_attr = "done" if state == "completed" else "pending" if state == "pending" else state
     return f'''<div id="stage-{_esc(key)}" data-active="{str(active).lower()}" data-stage-key="{_esc(key)}" data-stage-status="{status_attr}" class="step-card group relative rounded-xl bg-white border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,.04)] transition hover:shadow-md{state_cls}{accent_cls}">
   <div class="flex w-full items-center gap-2 border-b border-neutral-200 -mx-4 -mt-4 mb-3 px-4 py-2 bg-neutral-50 rounded-t-xl">
-    <span class="material-symbols-rounded step-icon text-neutral-400" aria-hidden="true">{icon}</span>
+    {_icon(icon, "ico step-icon text-neutral-400")}
     <div class="step-title font-semibold text-[13px] text-neutral-900">{_esc(title)}</div>
   </div>
   <div class="text-[11px] text-neutral-500 uppercase tracking-widest font-medium" data-stage-chip data-idle-chip="{_esc(chip)}">{_esc(chip)}</div>
@@ -245,7 +274,7 @@ def _main_cards(run: JudgeRun) -> str:
   <section class="rounded-2xl border bg-white p-6 px-7 shadow-[0_1px_3px_rgba(0,0,0,.04)] verdict-section verdict-section--{_decision_class(decision)}" data-final-decision="{_attr(decision)}" data-decision-label="{_attr(_decision_label(decision))}">
     <div class="flex items-start justify-between gap-4">
       <div class="flex items-start gap-3">
-        <span class="material-symbols-rounded text-[26px] text-neutral-400 mt-1" aria-hidden="true">gavel</span>
+        {_icon("gavel", "ico text-[26px] text-neutral-400 mt-1")}
         <div>
           <p class="text-[11px] font-medium tracking-widest uppercase text-neutral-500 mb-1">Live Result</p>
           <h1 id="main-verdict-title" class="text-[28px] font-semibold tracking-tight decision-{_decision_class(decision)}">{_esc(_decision_label(decision).split(" ", 1)[0])}</h1>
@@ -288,7 +317,7 @@ def _main_cards(run: JudgeRun) -> str:
     </div>
     <details class="group mt-5">
       <summary class="flex cursor-pointer list-none items-center gap-1.5 text-[11px] font-semibold tracking-widest uppercase text-neutral-500 select-none [&::-webkit-details-marker]:hidden">
-        <span class="material-symbols-rounded text-[15px] text-neutral-400 transition-transform group-open:rotate-180" aria-hidden="true">expand_more</span>
+        {_icon("expand_more", "ico text-[15px] text-neutral-400 transition-transform group-open:rotate-180")}
         Intercepted Model Output
       </summary>
       <div class="grid grid-cols-2 gap-x-8 gap-y-3 text-[12px] font-mono mt-3">
@@ -346,7 +375,7 @@ def _live_trace_section() -> str:
     return f'''<section class="run-shell live-shell live-trace" id="live-trace" data-live="1" aria-live="polite">
   <details class="group">
     <summary class="flex cursor-pointer list-none items-center justify-between text-[11px] font-semibold tracking-widest uppercase text-neutral-500 select-none [&::-webkit-details-marker]:hidden">
-      <span class="flex items-center gap-1.5"><span class="material-symbols-rounded text-[15px] text-neutral-400 transition-transform group-open:rotate-180" aria-hidden="true">expand_more</span>Execution Trace</span>
+      <span class="flex items-center gap-1.5">{_icon("expand_more", "ico text-[15px] text-neutral-400 transition-transform group-open:rotate-180")}Execution Trace</span>
       <span class="text-[10px] font-medium normal-case tracking-normal text-neutral-400">Real backend event trace</span>
     </summary>
     <div class="pipeline-card bg-white rounded-2xl border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,.04)] mt-3 overflow-hidden">
@@ -363,7 +392,7 @@ def _live_trace_section() -> str:
   <section class="mt-4" id="live-activity-section">
     <details class="group">
       <summary class="flex cursor-pointer list-none items-center justify-between text-[11px] font-semibold tracking-widest uppercase text-neutral-500 select-none [&::-webkit-details-marker]:hidden">
-        <span class="flex items-center gap-1.5"><span class="material-symbols-rounded text-[15px] text-neutral-400 transition-transform group-open:rotate-180" aria-hidden="true">expand_more</span>Live Activity</span>
+        <span class="flex items-center gap-1.5">{_icon("expand_more", "ico text-[15px] text-neutral-400 transition-transform group-open:rotate-180")}Live Activity</span>
         <span class="text-[10px] font-medium normal-case tracking-normal text-neutral-400">SSE event log</span>
       </summary>
       <div class="activity-card mt-3">
@@ -406,12 +435,11 @@ def render_main_view(run: JudgeRun) -> str:
 
 
 _JUDGE_CSS_HEAD = r'''
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap');
 :root{--bg:#f8f9f9;--surface:#fff;--low:#f3f4f4;--high:#e7e8e8;--line:#d7dadb;--ink:#191c1c;--muted:#62666a;--outline:#777b80;--blue:#0057c0;--red:#b42318;--red-bg:#fde7e4;--green:#17663c;--green-bg:#dff5e6;--shadow:0 2px 10px rgba(20,28,29,.045)}
 '''
 
 TOPBAR_CSS = r'''
-.topbar{height:56px;position:sticky;top:0;z-index:5;background:rgba(255,255,255,.94);backdrop-filter:blur(12px);border-bottom:1px solid rgba(119,123,128,.35)}.topbar-inner{width:100%;height:100%;padding:0 24px 0 12px;display:flex;align-items:center;justify-content:space-between;gap:20px}.brand{display:flex;align-items:center;gap:6px}.brand-logo{width:40px;height:40px;flex:none;border-radius:8px}.brand-text{display:flex;flex-direction:row;align-items:baseline;gap:8px;white-space:nowrap}.brand-text b{font-size:17px;letter-spacing:-.04em}.brand-text em,.brand-text small{font-style:normal;font-size:11px;color:var(--muted);white-space:nowrap}.tagline{color:var(--ink);font-size:15px;font-weight:650;letter-spacing:.01em;white-space:nowrap;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.topbar{height:56px;position:sticky;top:0;z-index:5;background:rgba(255,255,255,.94);backdrop-filter:blur(12px);border-bottom:1px solid rgba(119,123,128,.35)}.topbar-inner{width:100%;height:100%;padding:0 24px 0 12px;display:flex;align-items:center;justify-content:space-between;gap:20px}.brand{display:flex;align-items:center;gap:6px}.brand-logo{width:40px;height:40px;flex:none;border-radius:8px}.brand-text{display:flex;flex-direction:row;align-items:baseline;gap:8px;white-space:nowrap}.brand-text b{font-size:17px;letter-spacing:-.04em}.brand-text em,.brand-text small{font-style:normal;font-size:11px;color:var(--muted);white-space:nowrap}.tagline{color:var(--ink);font-size:15px;font-weight:650;letter-spacing:.01em;white-space:nowrap;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
 @media(max-width:840px){.topbar-inner{padding:0 10px 0 8px}.topbar small,.tagline{display:none}}
 '''
 
@@ -428,7 +456,7 @@ def render_topbar(active: str = "") -> str:
     )
 
 _CSS = _JUDGE_CSS_HEAD + TOPBAR_CSS + r'''
-.material-symbols-rounded{font-variation-settings:'FILL' 0,'wght' 300,'GRAD' 0,'opsz' 20}
+.ico{display:inline-block;width:1em;height:1em;vertical-align:-.125em;fill:currentColor;flex:none}
 @keyframes step-pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .run-shell .step-card{display:flex;flex-direction:column;align-items:flex-start;min-height:170px;padding:16px}
 .run-shell .step-card .step-icon{font-size:22px;line-height:1}
@@ -471,10 +499,10 @@ _CSS = _JUDGE_CSS_HEAD + TOPBAR_CSS + r'''
 .step-card--pending{border-color:#e5e7eb}
 .step-card--completed{border-color:#d4d4d4}
 .step-card--failed{border-color:#fecaca}
-.step-card--danger{border-color:#fecaca}.step-card--danger .material-symbols-rounded{color:#dc2626}
-.step-card--allow{border-color:#bbf7d0}.step-card--allow .material-symbols-rounded{color:#16a34a}
-.step-card--review{border-color:#fde68a}.step-card--review .material-symbols-rounded{color:#d97706}
-.step-card--block{border-color:#fecaca}.step-card--block .material-symbols-rounded{color:#dc2626}
+.step-card--danger{border-color:#fecaca}.step-card--danger .step-icon{color:#dc2626}
+.step-card--allow{border-color:#bbf7d0}.step-card--allow .step-icon{color:#16a34a}
+.step-card--review{border-color:#fde68a}.step-card--review .step-icon{color:#d97706}
+.step-card--block{border-color:#fecaca}.step-card--block .step-icon{color:#dc2626}
 .verdict-section--allow{border-color:#bbf7d0}.verdict-section--review{border-color:#fde68a}.verdict-section--block{border-color:#fecaca}
 .decision-allow{color:#16a34a}.decision-review{color:#d97706}.decision-block{color:#dc2626}.decision-neutral{color:#737373}
 .tier{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:6px;font:500 10px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.075em;text-transform:uppercase}
@@ -775,11 +803,9 @@ def render_page() -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>WIENER: Judge Live Demo</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>tailwind.config={{theme:{{extend:{{fontFamily:{{sans:['-apple-system','BlinkMacSystemFont','"SF Pro Display"','"SF Pro Text"','"Helvetica Neue"','Inter','sans-serif'],mono:['"SF Mono"','"Menlo"','JetBrains Mono','monospace']}}}}}}}}</script>
+  <!-- Fully local presentation layer: no CDN script, no webfont, no external
+       request of any kind, so the Judge UI renders identically offline. -->
+  <link rel="stylesheet" href="/judge/tailwind.css">
   <style>{_CSS}</style>
 </head>
 <body class="bg-[#f5f5f7] text-neutral-900 font-sans antialiased">
@@ -798,27 +824,27 @@ def render_page() -> str:
           <div class="grid gap-1.5">
             <label for="scenario" class="text-[10px] font-medium tracking-widest uppercase text-neutral-500">Attack Scenario Vector</label>
             <div class="select-wrap">
-              <span class="material-symbols-rounded select-caret" aria-hidden="true">expand_more</span>
+              {_icon("expand_more", "ico select-caret")}
               <select id="scenario" class="appearance-none bg-neutral-100 border-0 rounded-lg px-3 py-2 pr-8 text-[13px] text-neutral-900 min-w-[180px]">{scenario_options}</select>
             </div>
           </div>
           <div class="grid gap-1.5">
             <label for="provider" class="text-[10px] font-medium tracking-widest uppercase text-neutral-500">Model</label>
             <div class="select-wrap">
-              <span class="material-symbols-rounded select-caret" aria-hidden="true">expand_more</span>
+              {_icon("expand_more", "ico select-caret")}
               <select id="provider" class="appearance-none bg-neutral-100 border-0 rounded-lg px-3 py-2 pr-8 text-[13px] text-neutral-900 min-w-[180px]">{provider_options}</select>
             </div>
           </div>
         </div>
         <div class="flex items-center gap-2">
           <button id="btn-run" type="button" class="inline-flex items-center gap-1.5 px-4 py-2 bg-neutral-900 text-white text-[13px] font-medium rounded-lg hover:bg-neutral-800 transition disabled:opacity-50">
-            <span class="material-symbols-rounded text-sm">play_arrow</span> Run Scenario
+            {_icon("play_arrow", "ico text-sm")} Run Scenario
           </button>
           <button id="btn-reset" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 bg-neutral-100 text-neutral-700 text-[13px] font-medium rounded-lg hover:bg-neutral-200 transition disabled:opacity-50">
-            <span class="material-symbols-rounded text-sm">refresh</span> Reset
+            {_icon("refresh", "ico text-sm")} Reset
           </button>
           <button id="btn-replay" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 bg-neutral-100 text-neutral-700 text-[13px] font-medium rounded-lg hover:bg-neutral-200 transition disabled:opacity-50" title="Replay the latest real judge request">
-            <span class="material-symbols-rounded text-sm">replay</span> Replay Locked Trial
+            {_icon("replay", "ico text-sm")} Replay Locked Trial
           </button>
         </div>
       </div>

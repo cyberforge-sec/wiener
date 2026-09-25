@@ -34,6 +34,7 @@ class LocalProvider:
         timeout_s: float | None = None,
         max_tokens: int | None = None,
         keep_alive: str | None = None,
+        temperature: float | None = None,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         self._host = host if host is not None else config.LOCAL_HOST
@@ -41,6 +42,7 @@ class LocalProvider:
         self._timeout_s = timeout_s if timeout_s is not None else config.LOCAL_TIMEOUT_S
         self._max_tokens = max_tokens if max_tokens is not None else config.LOCAL_MAX_TOKENS
         self._keep_alive = keep_alive if keep_alive is not None else config.LOCAL_KEEP_ALIVE
+        self._temperature = temperature if temperature is not None else config.LOCAL_TEMPERATURE
         self._transport = transport
 
     def complete(self, system: str, user: str) -> LLMResponse:
@@ -50,7 +52,7 @@ class LocalProvider:
             "prompt": f"{system}\n\n{user}",
             "stream": False,
             "keep_alive": self._keep_alive,
-            "options": {"temperature": 0.2, "num_predict": self._max_tokens},
+            "options": {"temperature": self._temperature, "num_predict": self._max_tokens},
         }
 
         try:
@@ -79,5 +81,10 @@ class LocalProvider:
         return LLMResponse(
             text=text,
             provider=self.name,
-            meta={"model": self._model, "max_tokens": self._max_tokens},
+            meta={
+                "model": self._model,
+                "max_tokens": self._max_tokens,
+                "temperature": self._temperature,
+                "deterministic_requested": self._temperature == 0,
+            },
         )

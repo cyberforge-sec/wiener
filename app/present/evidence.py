@@ -160,6 +160,7 @@ class EvidenceBundle:
     code_fingerprint_root: str | None = None
     artifact_hashes: dict[str, str] | None = None
     source_provenance: dict[str, Any] | None = None
+    recompute_diffs: tuple[str, ...] = ()
 
 
 # Stored-row lift: fields copied with resilience, no metric recomputed here.
@@ -274,11 +275,37 @@ def _row_to_trial(row: dict[str, Any]) -> ExperimentTrial:
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
-    return [json.loads(ln) for ln in lines]
+    rows: list[dict[str, Any]] = []
+    for number, line in enumerate(lines, start=1):
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise EvidenceUnavailable(
+                f"{path.name} line {number} is not valid JSON: {exc}"
+            ) from exc
+        if not isinstance(row, dict):
+            raise EvidenceUnavailable(f"{path.name} line {number} is not an object")
+        rows.append(row)
+    return rows
 
 
 def _stored_metrics(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    if not path.exists():
+        # validation.json is optional for pre-lock runs; an absent file simply
+        # means "no validation report", not a broken artifact.
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise EvidenceUnavailable(f"{path.name} is not valid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise EvidenceUnavailable(f"{path.name} is not a JSON object")
+    return payload
+
+
+# Reasons the most recent load_evidence() call failed (non-fatal path only).
+# The dashboard surfaces these instead of rendering a blank "no data" page.
+load_errors: list[str] = []
 
 
 def _ci(value: Any) -> tuple[float | None, float | None]:
@@ -317,14 +344,46 @@ def _load_history() -> HistoricalDemo | None:
         return None
 
 
-def load_evidence(directory: str | Path | None = None) -> EvidenceBundle | None:
-    """Load the locked authoritative evidence bundle, or None when the locked
-    artifacts are missing/unreadable (the dashboard then falls back to the
-    generic stored-report view)."""
-    try:
-        return _load(authoritative_dir() if directory is None else Path(directory))
-    except Exception:  # noqa: BLE001 - evidence is additive; never crash the page
+class EvidenceUnavailable(RuntimeError):
+    """Raised when the evidence layer cannot be trusted to describe the run.
+
+    Callers must surface this instead of silently rendering an empty or
+    partial dashboard: a broken artifact directory must never look like a
+    clean run with no data.
+    """
+
+
+def load_evidence(
+    directory: str | Path | None = None,
+    *,
+    strict: bool = False,
+) -> EvidenceBundle | None:
+    """Load the authoritative evidence bundle.
+
+    Returns None when the locked artifacts are simply absent (the dashboard
+    then falls back to the generic stored-report view). Any *other* failure -
+    unreadable JSON, malformed rows, missing manifest - raises
+    :class:`EvidenceUnavailable` in strict mode and is recorded in
+    ``load_errors`` otherwise, so a corrupt evidence directory can never be
+    mistaken for an empty one.
+    """
+    target = authoritative_dir() if directory is None else Path(directory)
+    if not target.exists():
+        # Nothing has been generated yet: a normal state for a fresh clone.
+        load_errors.clear()
         return None
+    try:
+        bundle = _load(target)
+    except Exception as exc:  # noqa: BLE001 - classified, then re-raised when strict
+        detail = f"{type(exc).__name__}: {exc}"
+        load_errors.append(detail)
+        if strict:
+            raise EvidenceUnavailable(
+                f"authoritative evidence could not be loaded: {detail}"
+            ) from exc
+        return None
+    load_errors.clear()
+    return bundle
 
 
 def _derive_status(
@@ -345,9 +404,17 @@ def _derive_status(
 
 # Loader: reads ONLY the locked artifacts.
 def _load(dir_path: Path) -> EvidenceBundle:
+    required = ("trials.jsonl", "metrics.json")
+    missing = [name for name in required if not (dir_path / name).exists()]
+    if missing:
+        raise EvidenceUnavailable(
+            f"evidence directory {dir_path.name} is missing {', '.join(missing)}"
+        )
     metrics = _stored_metrics(dir_path / "metrics.json")
     validation = _stored_metrics(dir_path / "validation.json")
     rows = _read_jsonl(dir_path / "trials.jsonl")
+    if not rows:
+        raise EvidenceUnavailable(f"no trial rows in {dir_path / 'trials.jsonl'}")
 
     # Locked-status from the manifest when present, else derived from stored artifacts.
     manifest: dict[str, Any] = {}
@@ -472,6 +539,7 @@ def _load(dir_path: Path) -> EvidenceBundle:
         code_fingerprint_root=code_root,
         artifact_hashes=artifact_hashes,
         source_provenance=manifest.get("source_provenance") or {},
+        recompute_diffs=tuple(manifest.get("recompute_diffs") or ()),
     )
 
 
@@ -488,7 +556,11 @@ def build_evidence_dashboard(bundle: EvidenceBundle | None = None) -> DashboardD
         if bundle is None:
             return DashboardData.empty()
 
-    views = tuple(to_trial_view(t) for t in _load_trials(authoritative_dir()))
+    # The drill-down MUST come from the same directory the metrics came from.
+    # Re-resolving the "current best" directory here could pair a caller
+    # supplied bundle with a different run's trials.
+    trials_dir = experiments_root() / bundle.source_dir if bundle.source_dir else authoritative_dir()
+    views = tuple(to_trial_view(t) for t in _load_trials(trials_dir))
     rows = tuple(
         MetricRow(
             mode=bundle.by_mode[mode].mode,

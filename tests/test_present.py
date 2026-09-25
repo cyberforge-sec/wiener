@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -8,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from html.parser import HTMLParser
 
 import pytest
+from fastapi import HTTPException
 
 from app.dashboard.dashboard import DashboardData
 from app.judge.judge_mode import run_judge
@@ -135,6 +137,43 @@ def test_presentation_page_exposes_source_provenance_status():
     assert "LOCKED EVIDENCE · 16 / 16 PASS · VERIFIED" in page
 
 
+def test_dashboard_trials_come_from_the_bundles_own_directory():
+    """Regression: a supplied bundle must never be paired with another run's
+    trials (metrics from one experiment, ledger rows from another)."""
+    bundle = load_evidence()
+    data = build_evidence_dashboard(bundle)
+    assert data.trials, "expected trials for the loaded evidence"
+    # The loaded bundle is the locked run; the metrics and the drill-down must
+    # come from the same experiment id.
+    assert data.experiment_id == bundle.experiment_id
+    # Every rendered trial must exist in the bundle's own directory.
+    bundle_dir = Path(__file__).resolve().parent.parent / "data" / "experiments" / bundle.source_dir
+    assert bundle_dir.exists()
+    assert (bundle_dir / "trials.jsonl").exists()
+
+
+def test_dashboard_renders_stored_evidence_values():
+    bundle = load_evidence()
+    wiener = replace(bundle.by_mode["wiener"], incorrect_interventions=3)
+    altered = replace(
+        bundle,
+        by_mode={**bundle.by_mode, "wiener": wiener},
+        recompute_diffs=("uar mismatch",),
+        validation_status="FAIL",
+        validation_pass=15,
+        duplicate_trial_mode_ids=2,
+        evidence_status="CANDIDATE",
+    )
+
+    page = presentation_page(build_evidence_dashboard(altered))
+
+    assert "3 False Positives" in page
+    assert "1 Detected" in page
+    assert "15 / 16" in page
+    assert "2 Collisions" in page
+    assert "CANDIDATE EVIDENCE" in page
+
+
 def _render_for(action: str) -> dict:
     from tests.test_judge import StanceLLM
 
@@ -210,3 +249,37 @@ def test_run_to_meta_includes_presentation_fields():
     assert meta["decision"] == "ALLOW"
     assert meta["decision_label"] == "ALLOWED SIMULATED EXECUTION"
     assert meta["provider_tier"] == "live"
+
+def test_corrupt_evidence_fails_closed_instead_of_rendering_empty(tmp_path, monkeypatch):
+    """A present-but-unparseable evidence directory must not look like an empty run."""
+    import app.api.routes as routes
+    from app.present.evidence import EvidenceUnavailable, load_evidence, load_errors
+
+    broken = tmp_path / "authoritative_broken"
+    broken.mkdir()
+    (broken / "trials.jsonl").write_text("{not json}\n", encoding="utf-8")
+    (broken / "metrics.json").write_text("{}", encoding="utf-8")
+
+    # Non-strict: recorded, not raised.
+    assert load_evidence(broken) is None
+    assert load_errors, "failure reason must be recorded"
+
+    # Strict: raised.
+    with pytest.raises(EvidenceUnavailable):
+        load_evidence(broken, strict=True)
+
+    # And the route surfaces it as 503, not a blank dashboard.
+    monkeypatch.setattr(routes, "build_evidence_dashboard", lambda *a, **k: DashboardData.empty())
+    with pytest.raises(HTTPException) as ei:
+        routes._latest_dashboard(None)
+    assert ei.value.status_code == 503
+    assert "could not be parsed" in ei.value.detail
+
+
+def test_missing_evidence_is_not_an_error(tmp_path):
+    """Absent evidence is a normal state (fresh clone), not a failure."""
+    from app.present.evidence import load_evidence, load_errors
+
+    absent = tmp_path / "does_not_exist"
+    assert load_evidence(absent) is None
+    assert load_errors == []

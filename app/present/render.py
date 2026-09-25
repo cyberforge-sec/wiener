@@ -143,20 +143,30 @@ def _mode_name(mode: str) -> str:
     return _MODE_LABELS.get(mode, _title(mode))
 
 
+def _source_status(bundle: EvidenceBundle) -> str:
+    return str((bundle.source_provenance or {}).get("status") or "UNKNOWN").lower()
+
+
+def _evidence_sound(bundle: EvidenceBundle) -> bool:
+    return (
+        bundle.evidence_status == "LOCKED_VERIFIED"
+        and bundle.validation_status == "PASS"
+        and bundle.validation_pass == bundle.validation_invariants
+        and not bundle.recompute_diffs
+        and bundle.duplicate_trial_mode_ids == 0
+        and _source_status(bundle) == "match"
+    )
+
+
 def _locked_badge(bundle: EvidenceBundle) -> str:
-    locked = bundle.evidence_status == "LOCKED_VERIFIED"
-    source_status = str((bundle.source_provenance or {}).get("status") or "UNKNOWN").lower()
-    if locked and source_status == "stale":
-        return (
-            '<div class="locked locked--candidate"><b></b>LOCKED ARTIFACTS · '
-            f'{bundle.validation_pass} / {bundle.validation_invariants} PASS · SOURCE TREE STALE</div>'
-        )
-    if locked:
-        return (
-            '<div class="locked"><b></b>LOCKED EVIDENCE · '
-            f'{bundle.validation_pass} / {bundle.validation_invariants} PASS · VERIFIED</div>'
-        )
-    return '<div class="locked locked--candidate"><b></b>CANDIDATE EVIDENCE</div>'
+    if not _evidence_sound(bundle):
+        if bundle.evidence_status == "LOCKED_VERIFIED":
+            return '<div class="locked locked--candidate"><b></b>ARTIFACTS LOCKED · REVIEW REQUIRED</div>'
+        return '<div class="locked locked--candidate"><b></b>CANDIDATE EVIDENCE</div>'
+    return (
+        '<div class="locked"><b></b>LOCKED EVIDENCE · '
+        f'{bundle.validation_pass} / {bundle.validation_invariants} PASS · VERIFIED</div>'
+    )
 
 
 def _hero(bundle: EvidenceBundle) -> str:
@@ -197,13 +207,16 @@ def _metric_cards(bundle: EvidenceBundle) -> str:
   <div class="comparison-track"><span style="width:{width:.3f}%"></span></div>
 </div>''')
     wiener = bundle.by_mode[ExperimentMode.WIENER.value]
+    incorrect = wiener.incorrect_interventions
     fir_den = wiener.fir_den or bundle.benign_total
+    mismatch_count = len(bundle.recompute_diffs)
+    resume_ok = bundle.duplicate_trial_mode_ids == 0
     return f'''<section class="section" id="metrics">
   <div class="section-heading"><h2>Unsafe Action Rate (UAR) Comparison</h2><span>{bundle.n_trials - bundle.benign_total} ADVERSARIAL · {bundle.benign_total} BENIGN</span></div>
   <div class="metrics-grid">
     <article class="surface-card metric-card metric-card--uar"><span class="card-kicker">Comparative Defense Modes</span><h3>Rate of Unsafe Tool Executions</h3><p>Larger bar = higher risk of a dangerous action being executed.</p><div class="metric-rows">{''.join(rows)}</div></article>
-    <article class="surface-card metric-card"><span class="card-kicker">Operational Safety</span><h3>False Intervention Rate (FIR)</h3><p>Erroneous policy triggers against benign operations.</p><div class="big-stat">{_pct(wiener.fir)} <small>intervention rate</small></div><div class="inset"><div><span>Benign Sample</span><code>0 / {fir_den} trials</code></div><div><span>Interventions</span><code>0 False Positives</code></div></div></article>
-    <article class="surface-card metric-card"><span class="card-kicker">Integrity Baseline</span><h3>Automated Rig Validation</h3><p>Structural deterministic test-suite assertions.</p><div class="big-stat">{bundle.validation_pass} / {bundle.validation_invariants} <small class="pass">PASS</small></div><div class="inset"><div><span>Mismatch Vector</span><code>0 Detected</code></div><div><span>State Traceability</span><code>Deterministic</code></div></div></article>
+    <article class="surface-card metric-card"><span class="card-kicker">Operational Safety</span><h3>False Intervention Rate (FIR)</h3><p>Erroneous policy triggers against benign operations.</p><div class="big-stat">{_pct(wiener.fir)} <small>intervention rate</small></div><div class="inset"><div><span>Benign Sample</span><code>{incorrect} / {fir_den} trials</code></div><div><span>Interventions</span><code>{incorrect} False Positives</code></div></div></article>
+    <article class="surface-card metric-card"><span class="card-kicker">Integrity Baseline</span><h3>Automated Rig Validation</h3><p>Structural deterministic test-suite assertions.</p><div class="big-stat">{bundle.validation_pass} / {bundle.validation_invariants} <small class="pass">PASS</small></div><div class="inset"><div><span>Mismatch Vector</span><code>{mismatch_count} Detected</code></div><div><span>State Traceability</span><code>{"PASS" if resume_ok else "REVIEW"}</code></div></div></article>
   </div>
   <span class="sr-only" data-uapr="{_attr(bundle.uapr)}" data-baseline="{_attr(bundle.uapr_baseline)}" data-defended="{_attr(bundle.uapr_defended)}">UAPR {_esc(_display(bundle.uapr))}</span>
 </section>'''
@@ -284,13 +297,26 @@ def _locked_at_lines(raw: str | None) -> str:
 
 def _provenance(bundle: EvidenceBundle) -> str:
     locked = bundle.evidence_status == "LOCKED_VERIFIED"
-    source_status = str((bundle.source_provenance or {}).get("status") or "UNKNOWN").lower()
-    if locked and source_status == "stale":
+    sound = _evidence_sound(bundle)
+    source_status = _source_status(bundle)
+    if sound:
+        status_line = "STATUS: VERIFIED SOUND"
+    elif locked and source_status == "stale":
         status_line = "STATUS: ARTIFACTS LOCKED · SOURCE TREE STALE"
     elif locked:
-        status_line = "STATUS: VERIFIED SOUND"
+        status_line = "STATUS: ARTIFACTS LOCKED · REVIEW REQUIRED"
     else:
         status_line = "STATUS: CANDIDATE EVIDENCE"
+
+    wiener = bundle.by_mode[ExperimentMode.WIENER.value]
+    incorrect = wiener.incorrect_interventions
+    mismatch_count = len(bundle.recompute_diffs)
+    resume_label = "PASS · Clean" if bundle.duplicate_trial_mode_ids == 0 else f"REVIEW · {bundle.duplicate_trial_mode_ids} Collisions"
+    validation_label = "VERIFIED SOUND" if sound else "REVIEW REQUIRED"
+    validation_class = "pass" if sound else "candidate"
+    lock_phrase = "AUTHORITATIVE DATA LOCKED" if sound else "AUTHORITATIVE DATA NOT VERIFIED"
+    source = bundle.source_provenance or {}
+    source_label = "MATCH" if source_status == "match" else source_status.upper()
     evidence_row = f'<div class="manifest-item"><span>EVIDENCE STATUS</span><b class="pass pill">{_esc(bundle.evidence_status)}</b></div>'
     if locked:
         evidence_row += (
@@ -298,31 +324,26 @@ def _provenance(bundle: EvidenceBundle) -> str:
             f'<span>LOCKED AT</span><b class="ts">{_locked_at_lines(bundle.locked_at)}</b></div>'
         )
     code_row = f'<div class="manifest-item"><span>CODE FINGERPRINT</span><b data-fingerprint-root="{_attr(bundle.code_fingerprint_root)}">{_esc(bundle.code_fingerprint_root or "—")}</b></div>'
-    source = bundle.source_provenance or {}
-    source_status = str(source.get("status") or "UNKNOWN").lower()
-    source_label = "MATCH" if source_status == "match" else source_status.upper()
     source_row = f'<div class="manifest-item"><span>SOURCE TREE</span><b data-source-provenance="{_attr(source_status)}">{_esc(source_label)}</b></div>'
     status_row = f'{evidence_row}{code_row}{source_row}'
     artifact_row = ""
     if bundle.artifact_hashes:
-        try:
-            artifact_row = f'<div class="manifest-item"><span>ARTIFACT HASH</span><b data-evidence-sha="{_attr(bundle.artifact_hashes.get("trials.jsonl"))}">{_esc(bundle.artifact_hashes.get("trials.jsonl", ""))}</b></div>'
-        except Exception:  # noqa: BLE001
-            artifact_row = ""
+        artifact_row = f'<div class="manifest-item"><span>ARTIFACT HASH</span><b data-evidence-sha="{_attr(bundle.artifact_hashes.get("trials.jsonl"))}">{_esc(bundle.artifact_hashes.get("trials.jsonl", ""))}</b></div>'
+
     return f'''<section class="section" id="provenance"><div class="section-heading"><h2>Evidence Integrity &amp; Provenance Check</h2><span class="verified">{status_line}</span></div>
 <article class="surface-card provenance">
 <div class="src-artifact"><span class="card-kicker">Source Artifact</span><code class="src-path">data/experiments/{_esc(bundle.source_dir)}/</code></div>
-<div class="provenance-grid"><div><span>Total Records</span><b data-total-trials="{bundle.n_trials}">{bundle.n_trials} Complete</b></div><div><span>Duplicate IDs</span><b>{bundle.duplicate_trial_mode_ids} Collisions</b></div><div><span>Independent Mismatch</span><b>0 Deviations</b></div><div><span>Resume Integrity</span><b class="pass">PASS · Clean</b></div></div><span class="sr-only" data-evidence-benign-total="{bundle.benign_total}">{bundle.benign_total} benign controls</span>
+<div class="provenance-grid"><div><span>Total Records</span><b data-total-trials="{bundle.n_trials}">{bundle.n_trials} Complete</b></div><div><span>Duplicate IDs</span><b>{bundle.duplicate_trial_mode_ids} Collisions</b></div><div><span>Independent Mismatch</span><b>{mismatch_count} Deviations</b></div><div><span>Resume Integrity</span><b class="{'pass' if bundle.duplicate_trial_mode_ids == 0 else 'candidate'}">{resume_label}</b></div></div><span class="sr-only" data-evidence-benign-total="{bundle.benign_total}">{bundle.benign_total} benign controls</span>
 <p class="manifest-title">Authoritative Dataset Provenance &amp; Run Specification</p>
 <div class="manifest">
 <div class="manifest-item"><span>DATASET PATH</span><b>data/experiments/{_esc(bundle.source_dir)}/</b></div>
 <div class="manifest-item"><span>RECORDS EVALUATED</span><b>{bundle.n_trials} Trials · {bundle.trials_per_mode} Wiener · {bundle.trials_per_mode} Basic Prompt · {bundle.trials_per_mode} No Defense</b></div>
-<div class="manifest-item"><span>BENIGN CONTROLS</span><b>{bundle.benign_total} Benign Runs · 0 False Positives</b></div>
-<div class="manifest-item"><span>VALIDATION STATUS</span><b class="pass" data-validation="{_attr(bundle.validation_status)}">{bundle.validation_pass} / {bundle.validation_invariants} PASSED · VERIFIED SOUND</b></div>
+<div class="manifest-item"><span>BENIGN CONTROLS</span><b>{bundle.benign_total} Benign Runs · {incorrect} False Positives</b></div>
+<div class="manifest-item"><span>VALIDATION STATUS</span><b class="{validation_class}" data-validation="{_attr(bundle.validation_status)}">{bundle.validation_pass} / {bundle.validation_invariants} PASSED · {validation_label}</b></div>
 {status_row}{artifact_row}
 <div class="manifest-item wide"><span>TRIALS SHA256</span><b data-evidence-sha="{_attr(bundle.trials_sha256)}">{_esc(bundle.trials_sha256)}</b></div>
 </div>
-<p class="sr-only" data-fir-total="{_attr(bundle.by_mode[ExperimentMode.WIENER.value].fir)}">Provenance. AUTHORITATIVE DATA LOCKED. Dangerous proposals reaching SOC-agent stage: <b>{bundle.proposals}</b>. Unsafe tool executions: <b>{bundle.executed}</b><span data-unsafe-tool-executions="{bundle.executed}"></span>. FIR {_pct(bundle.by_mode[ExperimentMode.WIENER.value].fir)} — {bundle.benign_total} benign trials; 0 incorrect interventions.</p></article></section>'''
+<p class="sr-only" data-fir-total="{_attr(wiener.fir)}">Provenance. {lock_phrase}. Dangerous proposals reaching SOC-agent stage: <b>{bundle.proposals}</b>. Unsafe tool executions: <b>{bundle.executed}</b><span data-unsafe-tool-executions="{bundle.executed}"></span>. FIR {_pct(wiener.fir)} — {bundle.benign_total} benign trials; {incorrect} incorrect interventions.</p></article></section>'''
 
 
 def _audit_layer(data: DashboardData, selected: TrialView | None, bundle: EvidenceBundle) -> str:

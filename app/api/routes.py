@@ -8,7 +8,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from pydantic import BaseModel
 
 from ..dashboard import DashboardData, ReportStore, build_dashboard, render_html
-from ..present.evidence import build_evidence_dashboard
+from ..dashboard.store import ReportStoreError
+from ..metrics.core import MetricsError
+from ..present.evidence import build_evidence_dashboard, load_errors
 from ..present.render import presentation_page
 from ..judge import (
     JudgeInputError,
@@ -82,12 +84,36 @@ def health() -> dict:
 def _latest_dashboard(trial: str | None):
     """Preferred presentation path: the LOCKED authoritative run. Falls back to
     the latest stored generic ExperimentReport only when the locked artifacts
-    are missing or unreadable."""
+    are missing or unreadable.
+
+    Fail-closed: a present-but-corrupt evidence directory (bad JSON, no trial
+    rows) must not degrade into an empty "no data" dashboard, so it surfaces as
+    HTTP 503 with the reason instead of silently showing zeros.
+    """
     data = build_evidence_dashboard()
     if data.evidence is not None:
         return data
-    report = ReportStore().load_latest()
-    return build_dashboard(report) if report is not None else None
+    if load_errors:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "authoritative evidence is present but could not be parsed: "
+                + "; ".join(load_errors)
+            ),
+        )
+    try:
+        report = ReportStore().load_latest()
+    except ReportStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if report is None:
+        return None
+    try:
+        return build_dashboard(report)
+    except MetricsError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"stored report metrics could not be computed: {exc}",
+        ) from exc
 
 
 @router.get("/dashboard")
@@ -145,6 +171,24 @@ def judge_page() -> HTMLResponse:
 def judge_logo() -> FileResponse:
     """The WIENER wordmark logo shown beside the brand name in the top bar."""
     return FileResponse(_LOGO_PATH, media_type="image/png")
+
+
+_JUDGE_CSS_PATH = Path(__file__).resolve().parent.parent / "judge" / "static" / "tailwind.css"
+
+
+@router.get("/judge/tailwind.css")
+def judge_tailwind_css() -> FileResponse:
+    """Vendored Judge UI stylesheet.
+
+    Served from the repository instead of cdn.tailwindcss.com so the Judge
+    page needs no network access and runs no third-party script. Regenerate
+    with ./scripts/build_judge_css.sh.
+    """
+    return FileResponse(
+        _JUDGE_CSS_PATH,
+        media_type="text/css",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @router.post("/judge/run")

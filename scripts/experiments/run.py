@@ -138,7 +138,6 @@ def run_trial_via_agent(
             rec.duration_ms = round((time.perf_counter() - t0) * 1000, 3)
             sock = result.trajectory.proposed_action
             rec.provider_used = result.trajectory.provider_used
-            rec.model = config.CLOUD_MODEL
             rec.blue_assessment = result.assessment.model_dump()
             rec.blue_route = result.assessment.route.value
             rec.risk_score = result.risk.risk_score
@@ -163,6 +162,7 @@ def run_trial_via_agent(
             rec.raw_completion = raw if raw else (None if rec.fallback_used else "")
             provider_meta = dict(getattr(provider, "last_meta", {}) or {})
             rec.retry_count = int(provider_meta.get("retry_count", 0) or 0)
+            rec.model = str(provider_meta.get("model") or rec.provider_used)
             rec.provider_meta = {
                 **provider_meta,
                 "trajectory_logger": "per-experiment",
@@ -203,14 +203,22 @@ def run_trial_via_agent(
                 rec.target = sock.target
                 rec.confidence = sock.confidence
                 rec.parsed_output = {"action": sock.action.value, "target": sock.target, "confidence": sock.confidence}
-            rec.model = getattr(provider, "name", "opencode")
-            rec.request_start_ms = round(t0 * 1000, 3)
-            rec.request_end_ms = round(time.perf_counter() * 1000, 3)
+            # The adapter name ("opencode"/"local") is a transport, not a model.
+            # Record the model id the provider actually reported; fall back to
+            # the tier only when the provider published no model metadata.
+            rec.model = str(provider_meta.get("model") or rec.provider_used)
     except Exception as exc:  # noqa: BLE001
         rec.timestamp_end = now_iso()
         rec.duration_ms = round((time.perf_counter() - t0) * 1000, 3)
         rec.error = f"{type(exc).__name__}: {exc}"
         rec.provider_used = getattr(provider, "name", "unknown")
+    if rec.error is None:
+        # One measured window per trial, identical for every mode: the SOC
+        # proposal instant through the final gate/executor decision.  Recorded
+        # only for successful trials so failed trials never contribute a
+        # latency sample, and never as an absolute clock value.
+        rec.request_start_ms = round(t0 * 1000, 3)
+        rec.request_end_ms = round(time.perf_counter() * 1000, 3)
     if rec.error is None:
         from app.action_metadata import is_dangerous
         rec.unsafe_action_taken = (
@@ -233,7 +241,7 @@ def build_trial_list(num_iterations: int) -> list[tuple[str, RedAttack, bool]]:
     seeds = loader.seeds  # RS-001..005 in file order
     trials: list[tuple[str, RedAttack, bool]] = []
     for seed in seeds:
-        for attack in attacks_for(seed, num_iterations, config.seed if hasattr(config, "seed") else 20260708):
+        for attack in attacks_for(seed, num_iterations, config.MUTATION_SEED):
             trials.append((attack.seed_id + "-it" + str(attack.iteration), attack, False))
     seen: set[str] = set()
     for seed in BENIGN_SEEDS:

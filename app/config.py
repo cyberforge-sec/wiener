@@ -59,10 +59,19 @@ class Config:
     LOCAL_TIMEOUT_S: float = float(os.getenv("WIENER_LOCAL_TIMEOUT_S", "60"))
     # Bound local output: short structured responses, not long reasoning.
     LOCAL_MAX_TOKENS: int = int(os.getenv("WIENER_LOCAL_MAX_TOKENS", "128"))
+    # Sampling temperature for the local rung. 0.2 is the historical value; it
+    # is configurable and always recorded in provider metadata so no evidence
+    # row can imply local determinism that was never requested.
+    LOCAL_TEMPERATURE: float = float(os.getenv("WIENER_LOCAL_TEMPERATURE", "0.2"))
     # Keep-alive to avoid cold reloads; seconds or "5m"/"30m".
     LOCAL_KEEP_ALIVE: str = os.getenv("WIENER_LOCAL_KEEP_ALIVE", "5m")
 
     REPLAY_DIR: str = str(_PROJECT_ROOT / "data" / "replays")
+
+    # Attack-mutation RNG seed for the authoritative experiment. Explicit and
+    # configurable (was a `hasattr(config, "seed")` probe that always fell
+    # through to the same literal); recorded in experiment_config.json.
+    MUTATION_SEED: int = int(os.getenv("WIENER_MUTATION_SEED", "20260708"))
 
     # Risk bands (0-100): below ALLOW → ALLOW, below REVIEW → REVIEW, else BLOCK.
     RISK_ALLOW_THRESHOLD: float = float(os.getenv("WIENER_RISK_ALLOW", "30"))
@@ -92,7 +101,7 @@ class Config:
     # Experiment runner: persisted ExperimentReport JSON store (dashboard input).
     EXPERIMENT_STORE_PATH: str = str(_PROJECT_ROOT / "data" / "experiments")
 
-    API_HOST: str = os.getenv("WIENER_API_HOST", "0.0.0.0")
+    API_HOST: str = os.getenv("WIENER_API_HOST", "127.0.0.1")
     API_PORT: int = int(os.getenv("WIENER_API_PORT", "8000"))
 
 

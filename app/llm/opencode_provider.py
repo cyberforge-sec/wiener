@@ -171,6 +171,12 @@ class OpenCodeProvider:
                         provider=self.name,
                         meta={
                             "model": self._model,
+                            "temperature": self._temperature,
+                            # A requested temperature of 0 is a request, not a
+                            # guarantee: hosted gateways may still sample. The
+                            # evidence layer records this flag instead of
+                            # asserting bit-identical determinism.
+                            "deterministic_requested": self._temperature == 0,
                             "request_attempts": request_count,
                             "retry_count": request_count - 1,
                         },

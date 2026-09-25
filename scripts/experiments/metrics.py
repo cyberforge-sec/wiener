@@ -122,7 +122,13 @@ def to_experiment_trial(r: TrialRecord) -> ExperimentTrial:
         outcome=outcome,
         error=r.error,
         provider=r.provider_used,
-        generated_at_ms=0.0,
+        # The harness measures one window per trial: attack construction (t0)
+        # through the final gate/executor decision.  A prior mapping pinned
+        # generated_at_ms to 0.0, which turned the absolute perf_counter epoch
+        # into an "e2e latency" of ~1.7e6 ms.  Detection and intervention share
+        # the same two instants, so TTI and E2E are equal inside the harness and
+        # are labelled as such in metrics.json (`latency_basis`).
+        generated_at_ms=r.request_start_ms,
         detected_at_ms=r.request_start_ms,
         intervened_at_ms=r.request_end_ms,
     )
@@ -190,6 +196,13 @@ def metrics_summary(report: ExperimentReport) -> dict:
     return {
         "computed_at": now_iso(),
         "metric_source": "app.metrics.core.compute_metrics (UNMODIFIED)",
+        "latency_basis": (
+            "TTI and E2E both derive from the single measured per-trial window "
+            "(request_start_ms -> request_end_ms) recorded by "
+            "scripts/experiments/run.py, so they are equal by construction. The "
+            "offline harness does not observe detection separately from attack "
+            "construction; neither value is a cross-host latency claim."
+        ),
         "by_mode": rows,
         "uapr_baseline_vs_defended": {
             "baseline": "no_defense",

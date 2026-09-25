@@ -51,6 +51,18 @@ def test_cloud_provider_contract():
     assert resp.text == _GOOD_RESPONSE_TEXT
     assert resp.provider == "opencode"
     assert resp.meta["model"] == "m"
+    assert resp.meta["temperature"] == 0.0
+    assert resp.meta["deterministic_requested"] is True
+
+
+def test_cloud_provider_reports_requested_temperature():
+    provider = OpenCodeProvider(
+        api_key="key", base_url="https://example.invalid/v1", model="m",
+        temperature=0.7, transport=_cloud_transport(),
+    )
+    resp = provider.complete(SYSTEM, USER)
+    assert resp.meta["temperature"] == 0.7
+    assert resp.meta["deterministic_requested"] is False
 
 
 def test_cloud_provider_handles_trailing_stream_done_sentinel():
@@ -199,6 +211,17 @@ def test_local_provider_contract():
     assert resp.text == _GOOD_RESPONSE_TEXT
     assert resp.provider == "local"
     assert resp.meta["max_tokens"] == 64
+
+
+def test_local_provider_reports_requested_temperature():
+    provider = LocalProvider(
+        host="http://example.invalid", model="qwen", temperature=0.2,
+        transport=_local_transport(),
+    )
+    resp = provider.complete(SYSTEM, USER)
+    assert resp.meta["model"] == "qwen"
+    assert resp.meta["temperature"] == 0.2
+    assert resp.meta["deterministic_requested"] is False
 
 
 def test_replay_provider_contract():

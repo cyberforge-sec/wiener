@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from .common import ROOT, now_iso, repo_manifest
@@ -95,10 +96,14 @@ def code_fingerprint() -> dict:
     }
 
 
-def fingerprint_status(stored: dict | None) -> dict:
-    """Compare a stored code fingerprint with the current source tree."""
+def fingerprint_status(stored: dict | None, current: dict | None = None) -> dict:
+    """Compare a stored code fingerprint with the current source tree.
+
+    `current` may be passed to avoid re-hashing the tree once per candidate
+    when several evidence directories are being compared.
+    """
     stored = stored or {}
-    current = code_fingerprint()
+    current = current if current is not None else code_fingerprint()
     stored_files = set(stored.get("files") or [])
     current_files = set(current["files"])
     stored_hashes = stored.get("file_hashes") or {}
@@ -434,21 +439,156 @@ def write_evidence_manifest(out_dir: Path) -> dict:
     return manifest
 
 
-def locked_evidence_dir(root: Path) -> Path | None:
-    """Pick the newest experiment dir carrying a LOCKED_VERIFIED manifest."""
-    best: Path | None = None
-    best_at = ""
-    for child in sorted((d for d in root.iterdir() if d.is_dir())):
-        manifest = child / MANIFEST_NAME
-        if not manifest.exists():
-            continue
+# --- evidence selection ---------------------------------------------------
+#
+# `evidence_status` in a manifest is a record of what was true WHEN the run was
+# locked. It is not a statement about the current tree, and it must not be the
+# only thing that decides what the dashboard shows: an artifact locked by an
+# earlier revision of the code is exactly the artifact a reader needs to be
+# warned about, not the one to headline.
+#
+# Two selectors, deliberately separate:
+#
+#   locked_evidence_dir()        only what is CURRENTLY genuinely locked
+#   best_available_evidence_dir() the most defensible artifact overall
+#
+# The dashboard uses the second. A `CANDIDATE` bundle can therefore be shown
+# when it is the most defensible evidence available, and it keeps its
+# CANDIDATE status: selection never promotes an artifact's status.
+
+_PROVENANCE_RANK = {"match": 2, "unknown": 1, "stale": 0}
+_TIMESTAMP_IN_NAME = re.compile(r"(\d{8})_(\d{4})")
+
+
+def _recency_key(data: dict, child: Path) -> tuple[int, str]:
+    """Sortable recency: prefer an explicit timestamp over a directory mtime."""
+    at = str(data.get("locked_at") or data.get("experiment_created_at") or "")
+    match = _TIMESTAMP_IN_NAME.search(child.name)
+    if match:
+        return (1, f"{match.group(1)}{match.group(2)}{at}")
+    try:
+        return (0, f"{int(child.stat().st_mtime):020d}{at}")
+    except OSError:
+        return (0, at)
+
+
+def assess_evidence_dir(child: Path, current_fingerprint: dict | None = None) -> dict | None:
+    """Assess one evidence directory against the CURRENT tree.
+
+    Returns None when the directory is not readable as evidence at all (no
+    manifest, or unparseable). Everything reported here is recomputed where the
+    project can recompute it, rather than copied from the manifest.
+    """
+    manifest_path = child / MANIFEST_NAME
+    if not manifest_path.exists():
+        return None
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 - an unreadable manifest is not evidence
+        return None
+
+    stored_status = str(data.get("evidence_status") or "UNKNOWN")
+
+    # Current provenance: recomputed against the tree being served.
+    fingerprint_path = child / "code_fingerprint.json"
+    provenance = "unknown"
+    if fingerprint_path.exists():
         try:
-            data = json.loads(manifest.read_text(encoding="utf-8"))
+            stored_fp = json.loads(fingerprint_path.read_text(encoding="utf-8"))
+            provenance = str(
+                fingerprint_status(stored_fp, current_fingerprint).get("status", "unknown")
+            ).lower()
         except Exception:  # noqa: BLE001
-            continue
-        if data.get("evidence_status") == "LOCKED_VERIFIED":
-            at = data.get("locked_at") or data.get("experiment_created_at") or child.name
-            if at >= best_at:
-                best_at = at
-                best = child
-    return best
+            provenance = "unknown"
+    provenance = provenance if provenance in _PROVENANCE_RANK else "unknown"
+
+    summary = data.get("validation_summary") or {}
+    try:
+        passed = int(summary.get("invariants_passed") or 0)
+    except (TypeError, ValueError):
+        passed = 0
+    try:
+        total = int(summary.get("invariants_total") or 0)
+    except (TypeError, ValueError):
+        total = 0
+    validation_ok = str(summary.get("status") or "").upper() == "PASS"
+    gates = data.get("gates") or {}
+    no_degraded = gates.get("no_degraded_trials")
+
+    # "Currently locked" means: locked when produced AND still matching the
+    # tree AND its validation still passes. Any drift disqualifies it.
+    currently_locked = (
+        stored_status == "LOCKED_VERIFIED" and provenance == "match" and validation_ok
+    )
+
+    return {
+        "dir": child,
+        "name": child.name,
+        "stored_evidence_status": stored_status,
+        "provenance": provenance,
+        "validation_status": summary.get("status"),
+        "validation_ok": validation_ok,
+        "invariants_passed": passed,
+        "invariants_total": total,
+        "no_degraded_gate": no_degraded,
+        "currently_locked": currently_locked,
+        "_rank": (
+            provenance == "match",
+            currently_locked,
+            validation_ok,
+            no_degraded is True,
+            passed,
+            _recency_key(data, child),
+        ),
+    }
+
+
+def best_available_evidence_dir(root: Path) -> Path | None:
+    """Most defensible evidence currently on disk, by CURRENT state.
+
+    Ranking, most significant first:
+      1. readable / structurally valid
+      2. current provenance against the serving tree (match > unknown > stale)
+      3. currently locked (stored LOCKED_VERIFIED *and* provenance match *and*
+         validation still passing)
+      4. validation still passing
+      5. the no-degraded integrity gate
+      6. invariant pass count
+      7. recency
+
+    Note the consequence: a newer CANDIDATE artifact whose provenance matches
+    outranks an older LOCKED_VERIFIED artifact whose provenance has gone stale,
+    because current defensibility outranks a historical status string. A
+    currently-locked artifact still outranks a candidate: the ordering is not
+    "candidate always wins".
+    """
+    current = code_fingerprint()
+    candidates = [a for a in (assess_evidence_dir(c, current) for c in _evidence_dirs(root)) if a]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda a: a["_rank"])["dir"]
+
+
+def locked_evidence_dir(root: Path) -> Path | None:
+    """Newest evidence dir that is CURRENTLY genuinely LOCKED_VERIFIED.
+
+    Unchanged in intent, tightened in practice: a stored `LOCKED_VERIFIED` whose
+    code fingerprint no longer matches the tree is no longer locked, because it
+    describes a different revision than the one being served.
+    """
+    current = code_fingerprint()
+    locked = [
+        a
+        for a in (assess_evidence_dir(c, current) for c in _evidence_dirs(root))
+        if a and a["currently_locked"]
+    ]
+    if not locked:
+        return None
+    return max(locked, key=lambda a: a["_rank"])["dir"]
+
+
+def _evidence_dirs(root: Path) -> list[Path]:
+    try:
+        return sorted((d for d in root.iterdir() if d.is_dir()))
+    except OSError:
+        return []

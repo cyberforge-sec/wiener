@@ -77,6 +77,28 @@ archived e2e figure was produced by a mapping that leaked an absolute clock
 value into a subtraction. That is a correction, not a regression, and the old
 numbers are not edited.
 
+### The 2026-09-26 run: 135 trials, 17/18, CANDIDATE
+
+A full run on the `oc/big-pickle` route completed cleanly: 135/135 trials, 0
+degraded, 0 errors, provenance `MATCH`. It fails **only** `I-13b`, on all 135
+trials, because the route reports `big-pickle` for a request of
+`oc/big-pickle` and that id is a floating alias.
+
+It is retained as **provider-compatibility evidence**, not as the headline
+benchmark, and it is not locked. `docs/PROVIDER_SURVEY.md` records the full
+route survey behind that decision, including the finding that the one route
+with a verifiable model id (`gh/gpt-4o-mini-2024-07-18`) has an upstream
+content filter that rejects the injection payload the benchmark depends on.
+
+The WIENER row is the reason the run is worth keeping: ASR 0.0889 with UAR
+0.0000, against 0.0000/0.0000 for the prompt-only defense. WIENER saw dangerous
+proposals the prompt had suppressed and still produced zero unsafe executions.
+
+Preflight now refuses to start a run whose model identity cannot be verified
+(`A1.cloud.model-identity`), so this class of run is not spendable twice. The
+deliberate exception is `--allow-unverifiable-identity`, which records that the
+result can only be a `CANDIDATE`.
+
 ## What `provenance: MATCH` covers
 
 The fingerprint covers every `.py` file under `app/` and `scripts/experiments/`,

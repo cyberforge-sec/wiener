@@ -18,6 +18,7 @@ name or the requested id.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -27,6 +28,38 @@ from typing import Any
 TRANSPORT_NAMES = frozenset(
     {"", "opencode", "openai_compatible", "local", "replay", "degraded", "unknown", "none"}
 )
+
+# A PINNED model id names exactly one model forever. A floating alias
+# ("big-pickle", "default", "gpt-4o-mini", "llama-3.3-70b-versatile") names
+# whatever the provider currently points it at, so accepting one as evidence of
+# model identity would assert something that can change without the artifact
+# changing.
+#
+# Pinned means one of:
+#   - a dated snapshot anywhere:      gpt-4o-mini-2024-07-18, gemini-2.5-pro-20250101
+#   - a trailing version number:      claude-sonnet-4-6, llama-3.1-70b-2025
+#   - an explicit -vN:                qwen-v2
+#   - an immutable content hash:      some-model@a1b2c3d
+#
+# Note that digits alone are NOT enough: `gpt-4o-mini` contains a digit but is
+# a rolling alias, because the version is not at the end.
+_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_TRAILING_VERSION = re.compile(r"-\d+$")
+_EXPLICIT_VERSION = re.compile(r"-v\d+", re.IGNORECASE)
+_CONTENT_HASH = re.compile(r"@[0-9a-f]{7,}", re.IGNORECASE)
+
+
+def is_pinned_model_id(value: object) -> bool:
+    """True when the id names one immutable model (snapshot, version or hash)."""
+    text = str(value or "").strip()
+    if not text:
+        return False
+    return bool(
+        _DATE.search(text)
+        or _TRAILING_VERSION.search(text)
+        or _EXPLICIT_VERSION.search(text)
+        or _CONTENT_HASH.search(text)
+    )
 
 
 def looks_like_transport_name(value: object) -> bool:
@@ -51,24 +84,39 @@ class ProviderIdentity:
     deterministic_requested: bool = False
     endpoint: str | None = None
     extra: dict[str, Any] | None = None
+    # The model id the operator DECLARES this route should serve, when it is not
+    # simply the requested id. Gateways that route by prefix strip it
+    # (`gh/gpt-4o-mini-2024-07-18` -> `gpt-4o-mini-2024-07-18`), so the reported
+    # value legitimately differs from the request. The declaration is checked
+    # against the provider's own answer and recorded, rather than assumed.
+    declared_model: str | None = None
 
     @property
     def model_identity_reliable(self) -> bool:
-        """True only when the provider named the same model we asked for.
+        """True only when the provider named a model we can independently check.
 
-        Three ways this is false, all of them observed in practice:
+        False when:
           - nothing was reported (we only know what we asked for);
           - what was reported is a transport name, not a model;
-          - the provider answered with a DIFFERENT id. That means it
-            normalises ids, so this response cannot evidence which backing
-            model served. It does NOT mean the model is something other than
-            what the provider publicly lists: it means the response is not
-            independent evidence of it.
+          - the reported id is neither the requested id nor a declared one; or
+          - the only id offered in its place is a floating alias.
+
+        The last case needs care, because there are two different mismatches.
+        A gateway that strips a ROUTING PREFIX off a pinned public id
+        (`gh/gpt-4o-mini-2024-07-18` -> `gpt-4o-mini-2024-07-18`) is still
+        identifying one immutable model, and declaring the expected id makes
+        that auditable. A gateway that maps an opaque alias onto another opaque
+        name (`oc/big-pickle` -> `big-pickle`) is not, and no declaration may
+        make it so, because the reported value is not pinned to one model.
         """
         reported = self.provider_reported_model
         if not reported or looks_like_transport_name(reported):
             return False
-        return reported == self.requested_model
+        if reported == self.requested_model:
+            return True
+        if self.declared_model and reported == self.declared_model:
+            return is_pinned_model_id(reported)
+        return False
 
     @property
     def model_identity_note(self) -> str | None:
@@ -85,13 +133,26 @@ class ProviderIdentity:
                 f"provider reported {reported!r}, which is a transport name "
                 "rather than a model id; identity is unverified"
             )
+        if self.declared_model and reported == self.declared_model:
+            return (
+                f"provider reported {reported!r} as declared, but that id is a "
+                "floating alias rather than a pinned model, so it does not "
+                "identify one model; a declaration cannot make an alias "
+                "verifiable"
+            )
+        if not is_pinned_model_id(reported):
+            return (
+                f"provider reported {reported!r} for a request of "
+                f"{self.requested_model!r}, and that id is a floating alias "
+                "rather than a pinned model, so the backing model behind this "
+                "route is not independently evidenced. This is a statement "
+                "about identifiability, not an accusation about which model "
+                "actually served."
+            )
         return (
             f"provider reported {reported!r} for a request of "
-            f"{self.requested_model!r}: the gateway normalises model ids, so "
-            "the backing model behind this route is not independently "
-            "evidenced by the provider. It may well be the model that provider "
-            "publicly lists under that id; WIENER simply cannot confirm it "
-            "from this response."
+            f"{self.requested_model!r}, which matches neither the requested id "
+            "nor a declared expected model; the backing model is unverified"
         )
 
     @property
@@ -110,6 +171,7 @@ class ProviderIdentity:
             "adapter": self.adapter,
             "requested_model": self.requested_model,
             "provider_reported_model": self.provider_reported_model,
+            "declared_model": self.declared_model,
             # Back-compat alias. I-13b treats a transport name here as a
             # failure, so it must be the requested model or nothing.
             "model": self.requested_model,

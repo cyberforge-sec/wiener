@@ -381,3 +381,239 @@ def test_confirmed_model_identity_passes():
     )
     res = run_validation([rec], "e")
     assert "I-13b" not in res["failing_invariants"]
+
+
+# --- the identity gate must run BEFORE any live trial is spent ------------
+
+
+def test_preflight_blocks_the_run_when_identity_is_unverifiable():
+    """Spending 135 live trials on a route whose evidence could never be
+    locked is the waste this gate prevents."""
+    from scripts.experiments.preflight import Preflight
+
+    class StubProvider:
+        name = "openai_compatible"
+        _api_key = "k"
+
+        def complete(self, system, user):
+            from app.llm.base import LLMResponse
+
+            return LLMResponse(
+                text='{"action": "check_endpoint"}',
+                provider=self.name,
+                meta={
+                    "model": "oc/big-pickle",
+                    "requested_model": "oc/big-pickle",
+                    "provider_reported_model": "big-pickle",
+                    "model_identity_reliable": False,
+                    "model_identity_note": "floating alias",
+                },
+            )
+
+    import scripts.experiments.preflight as pf
+
+    class Cfg:
+        CLOUD_BASE_URL = "https://x.invalid/v1"
+        CLOUD_MODEL = "oc/big-pickle"
+        CLOUD_API_KEY = "k"
+        CLOUD_EXPECTED_MODEL = ""
+        CLOUD_RESPONSE_FORMAT = "json_object"
+        LLM_TIMEOUT_S = 5
+
+    class FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {"data": [{"id": "x"}], "choices": [{"message": {"content": "{}"}}]}
+
+        @property
+        def text(self):
+            return "{}"
+
+    class FakeHttpx:
+        Response = FakeResp
+
+        @staticmethod
+        def post(*a, **k):
+            return FakeResp()
+
+        @staticmethod
+        def get(*a, **k):
+            return FakeResp()
+
+    original_httpx = pf.httpx
+    original = pf.build_cloud_provider
+    original_config = pf.config
+    pf.build_cloud_provider = lambda *a, **k: StubProvider()
+    pf.config = Cfg()
+    pf.httpx = FakeHttpx
+    try:
+        strict = Preflight("e", __import__("pathlib").Path("/tmp"))
+        strict.a1_gateway()
+        identity = [c for c in strict.checks if c["check"] == "cloud.model-identity"]
+        assert len(identity) == 1
+        # Not ok => blocks the preflight, hence the run.
+        assert identity[0]["ok"] is False
+        assert identity[0]["overridden"] is False
+        assert "I-13b" in identity[0]["consequence"]
+
+        # Explicit override still records the failure, and flags it as overridden.
+        lenient = Preflight("e", __import__("pathlib").Path("/tmp"), allow_unverifiable_identity=True)
+        lenient.a1_gateway()
+        lenient_identity = [c for c in lenient.checks if c["check"] == "cloud.model-identity"]
+        assert lenient_identity[0]["ok"] is True
+        assert lenient_identity[0]["overridden"] is True
+    finally:
+        pf.build_cloud_provider = original
+        pf.config = original_config
+        pf.httpx = original_httpx
+
+
+def test_preflight_passes_identity_when_the_provider_confirms_the_model():
+    from pathlib import Path
+
+    from scripts.experiments.preflight import Preflight
+
+    class GoodProvider:
+        name = "openai_compatible"
+        _api_key = "k"
+
+        def complete(self, system, user):
+            from app.llm.base import LLMResponse
+
+            return LLMResponse(
+                text='{"action": "check_endpoint"}',
+                provider=self.name,
+                meta={
+                    "model": "gpt-4o-mini-2024-07-18",
+                    "requested_model": "gh/gpt-4o-mini-2024-07-18",
+                    "provider_reported_model": "gpt-4o-mini-2024-07-18",
+                    "declared_model": "gpt-4o-mini-2024-07-18",
+                    "model_identity_reliable": True,
+                },
+            )
+
+    import scripts.experiments.preflight as pf
+
+    class Cfg:
+        CLOUD_BASE_URL = "https://x.invalid/v1"
+        CLOUD_MODEL = "gh/gpt-4o-mini-2024-07-18"
+        CLOUD_API_KEY = "k"
+        CLOUD_EXPECTED_MODEL = "gpt-4o-mini-2024-07-18"
+        CLOUD_RESPONSE_FORMAT = "json_object"
+        LLM_TIMEOUT_S = 5
+
+    class FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {"data": [{"id": "x"}], "choices": [{"message": {"content": "{}"}}]}
+
+        @property
+        def text(self):
+            return "{}"
+
+    class FakeHttpx:
+        Response = FakeResp
+
+        @staticmethod
+        def post(*a, **k):
+            return FakeResp()
+
+        @staticmethod
+        def get(*a, **k):
+            return FakeResp()
+
+    original_httpx = pf.httpx
+    original = pf.build_cloud_provider
+    original_config = pf.config
+    pf.build_cloud_provider = lambda *a, **k: GoodProvider()
+    pf.config = Cfg()
+    pf.httpx = FakeHttpx
+    try:
+        pre = Preflight("e", Path("/tmp"))
+        pre.a1_gateway()
+        identity = [c for c in pre.checks if c["check"] == "cloud.model-identity"][0]
+        assert identity["ok"] is True
+        assert identity["overridden"] is False
+    finally:
+        pf.build_cloud_provider = original
+        pf.config = original_config
+        pf.httpx = original_httpx
+
+
+def test_identity_is_a_hard_gate_in_the_summary():
+    """A blocked identity must make the whole preflight BLOCKED, so main.py
+    refuses to launch 135 trials. The informational catalog check and an
+    explicit override are the only two ways to not be blocked here."""
+    from pathlib import Path
+
+    from scripts.experiments.preflight import Preflight
+
+    def build(identity_ok: bool, override: bool) -> str:
+        class Resp:
+            status_code = 200
+
+            def json(self):
+                return {"data": [{"id": "x"}]}
+
+            text = "{}"
+
+        class FakeHttpx:
+            Response = Resp
+
+            @staticmethod
+            def post(*a, **k):
+                return Resp()
+
+            @staticmethod
+            def get(*a, **k):
+                return Resp()
+
+        class Cfg:
+            CLOUD_BASE_URL = "https://x.invalid/v1"
+            CLOUD_MODEL = "m"
+            CLOUD_API_KEY = "k"
+            CLOUD_EXPECTED_MODEL = "pinned-2024-07-18"
+            CLOUD_RESPONSE_FORMAT = "json_object"
+            LLM_TIMEOUT_S = 5
+
+        class P:
+            name = "openai_compatible"
+            _api_key = "k"
+
+            def complete(self, s, u):
+                from app.llm.base import LLMResponse
+
+                return LLMResponse(
+                    text='{"action": "check_endpoint"}',
+                    provider=self.name,
+                    meta={
+                        "model": "m",
+                        "requested_model": "m",
+                        "provider_reported_model": "pinned-2024-07-18" if identity_ok else "floating",
+                        "model_identity_reliable": identity_ok,
+                    },
+                )
+
+        import scripts.experiments.preflight as pf
+
+        o_p, o_c, o_h = pf.build_cloud_provider, pf.config, pf.httpx
+        pf.build_cloud_provider = lambda *a, **k: P()
+        pf.config = Cfg()
+        pf.httpx = FakeHttpx
+        try:
+            pre = Preflight("e", Path("/tmp"), allow_unverifiable_identity=override)
+            pre.a1_gateway()
+            return pre.summary()["preflight"]
+        finally:
+            pf.build_cloud_provider, pf.config, pf.httpx = o_p, o_c, o_h
+
+    # Only a1 ran, so `hard` checks outside it are simply absent and cannot
+    # block; model-catalog is informational and also cannot block.
+    # Identity verifiable -> not blocked.
+    assert build(True, False) == "PASS"
+    # Identity unverifiable, no override -> BLOCKED, so no trials are spent.
+    assert build(False, False) == "BLOCKED"
+    # Identity unverifiable but explicitly overridden -> identity does not block.
+    assert build(False, True) == "PASS"

@@ -661,9 +661,76 @@ def test_identity_note_is_precise_not_an_accusation():
     assert note is not None
     # States the observation.
     assert "big-pickle" in note and "oc/big-pickle" in note
-    # States the consequence: not independently evidenced.
-    assert "not independently" in note
-    # Explicitly declines to assert the model is something else.
-    assert "publicly lists" in note
+    # States the consequence, and that it is about identifiability only.
+    assert "not independently evidenced" in note
+    assert "not an accusation" in note
     for accusation in ("is not big-pickle", "is a different model", "masquerad", "fake", "lying"):
         assert accusation not in note.lower()
+
+
+# --- declared expected model: auditable, and only for pinned ids ---------
+
+
+def test_pinned_model_ids_are_recognised():
+    from app.llm.identity import is_pinned_model_id
+
+    # Dated snapshots and explicit versions name one model forever.
+    for pinned in ("gpt-4o-mini-2024-07-18", "claude-sonnet-4-6", "gemini-2.5-pro-20250101"):
+        assert is_pinned_model_id(pinned), pinned
+    # Floating aliases do not.
+    for floating in ("big-pickle", "default", "auto", "gpt-4o-mini", "qwen2.5:1.5b", ""):
+        assert not is_pinned_model_id(floating), floating
+
+
+def test_routing_prefix_strip_is_verifiable_only_with_a_declaration():
+    """A gateway that strips a routing prefix off a PINNED public id is still
+    identifying one model. Without a declaration we cannot know that is what
+    happened, so we do not guess; with one, it is auditable."""
+    from app.llm.identity import ProviderIdentity
+
+    reported = "gpt-4o-mini-2024-07-18"
+    requested = "gh/gpt-4o-mini-2024-07-18"
+
+    undeclared = ProviderIdentity(
+        provider="9router", adapter="openai_compatible",
+        requested_model=requested, provider_reported_model=reported,
+    )
+    assert undeclared.model_identity_reliable is False
+
+    declared = ProviderIdentity(
+        provider="9router", adapter="openai_compatible",
+        requested_model=requested, provider_reported_model=reported,
+        declared_model=reported,
+    )
+    assert declared.model_identity_reliable is True
+    assert declared.model_identity_note is None
+    assert declared.as_meta()["declared_model"] == reported
+
+
+def test_a_declaration_cannot_rescue_a_floating_alias():
+    """The loophole this closes: you may not declare your way to a verifiable
+    identity by naming a rolling alias."""
+    from app.llm.identity import ProviderIdentity
+
+    identity = ProviderIdentity(
+        provider="opencode", adapter="openai_compatible",
+        requested_model="oc/big-pickle", provider_reported_model="big-pickle",
+        declared_model="big-pickle",
+    )
+    assert identity.model_identity_reliable is False
+    assert "declaration cannot make an alias" in identity.model_identity_note
+
+
+def test_unexpected_reported_id_fails_even_when_pinned():
+    """A pinned id is not enough on its own: it must match what was declared
+    or requested, or the route served something nobody asked for."""
+    from app.llm.identity import ProviderIdentity
+
+    identity = ProviderIdentity(
+        provider="9router", adapter="openai_compatible",
+        requested_model="gh/gpt-4o-mini-2024-07-18",
+        provider_reported_model="gpt-4o-2024-11-20",
+        declared_model="gpt-4o-mini-2024-07-18",
+    )
+    assert identity.model_identity_reliable is False
+    assert "matches neither" in identity.model_identity_note

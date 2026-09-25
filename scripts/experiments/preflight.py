@@ -44,12 +44,21 @@ def tz_iso() -> str:
     return now_iso()
 
 
+_UNSET = object()
+
+
 class Preflight:
-    def __init__(self, experiment_id: str, out_dir: Path) -> None:
+    def __init__(
+        self, experiment_id: str, out_dir: Path, *, allow_unverifiable_identity: bool = False
+    ) -> None:
         self.experiment_id = experiment_id
         self.out_dir = out_dir
         self.checks: list[dict] = []
         self.started_at = tz_iso()
+        # Escape hatch for deliberately producing CANDIDATE (provider
+        # compatibility) evidence. Off by default: an unverifiable model
+        # identity blocks the run, because the result could never be locked.
+        self.allow_unverifiable_identity = allow_unverifiable_identity
 
     def add(self, area: str, check: str, ok: bool, detail: str, data: dict | None = None) -> None:
         self.checks.append(
@@ -104,12 +113,25 @@ class Preflight:
         comp_ok = False
         comp_detail = ""
         calls: list[dict] = []
+        identity_ok = False
+        identity_note = _UNSET
         for i in range(3):
             t0 = time.perf_counter()
             try:
                 resp = build_cloud_provider().complete(MINIMAL_SYS, MINIMAL_JSON_PROBE)
                 dur = _ms(time.perf_counter() - t0)
-                payload = {"call": i, "duration_ms": dur, "text_len": len(resp.text), "provider": resp.provider, "model": resp.meta.get("model")}
+                payload = {
+                    "call": i,
+                    "duration_ms": dur,
+                    "text_len": len(resp.text),
+                    "provider": resp.provider,
+                    "model": resp.meta.get("model"),
+                    # Identity is recorded per call, not inferred from the config.
+                    "requested_model": resp.meta.get("requested_model"),
+                    "provider_reported_model": resp.meta.get("provider_reported_model"),
+                    "declared_model": resp.meta.get("declared_model"),
+                    "model_identity_reliable": resp.meta.get("model_identity_reliable"),
+                }
                 if response_contains_json(resp.text):
                     payload["valid_json"] = True
                     comp_ok = True
@@ -117,6 +139,10 @@ class Preflight:
                     payload["valid_json"] = False
                     payload["error"] = "no valid JSON object"
                     comp_ok = False
+                if payload["model_identity_reliable"]:
+                    identity_ok = True
+                elif identity_note == _UNSET:
+                    identity_note = resp.meta.get("model_identity_note") or "identity unreliable"
                 calls.append(payload)
             except Exception as exc:  # noqa: BLE001
                 dur = _ms(time.perf_counter() - t0)
@@ -128,6 +154,33 @@ class Preflight:
             f"dur_ms={durations}"
         )
         self.add("A1", "cloud.minimal-completion", comp_ok, comp_detail, {"calls": calls})
+
+        # 4) MODEL IDENTITY gate. Spending 135 live trials on a route whose model
+        #    identity cannot be verified produces an artifact that cannot be
+        #    locked, so this is checked BEFORE the run, on the same probes.
+        #    `blocking` is false only when the operator explicitly overrode it.
+        identity_detail = (
+            "every probe reported a verifiable model id"
+            if identity_ok
+            else (identity_note if identity_note is not _UNSET else "identity not reported")
+        )
+        self.add(
+            "A1",
+            "cloud.model-identity",
+            # Pass when identity is verifiable, or when the operator explicitly
+            # accepted a CANDIDATE-only run. Otherwise the run is refused.
+            identity_ok or self.allow_unverifiable_identity,
+            identity_detail,
+            {
+                "calls": calls,
+                "gate": "hard unless --allow-unverifiable-identity",
+                "overridden": bool(not identity_ok and self.allow_unverifiable_identity),
+                "consequence": (
+                    "run may be CANDIDATE: invariant I-13b will fail and the "
+                    "evidence cannot be locked"
+                ),
+            },
+        )
 
     def a2_env(self) -> None:
         cfg = {
@@ -224,7 +277,12 @@ class Preflight:
         )
 
     def summary(self) -> dict:
-        # Every required item is a hard gate; model-catalog is not (router serves oc/*).
+        # Every required item is a hard gate. Two are deliberately NOT:
+        #   - cloud.model-catalog: a router legitimately serves ids it does not
+        #     advertise, so absence from /models is not a fault.
+        #   - cloud.model-identity when the operator passed
+        #     --allow-unverifiable-identity: that run is knowingly a CANDIDATE,
+        #     and the check records `overridden: true` so the artifact says so.
         hard = [
             "cloud.credentials",
             "cloud.handshake",
@@ -237,7 +295,12 @@ class Preflight:
             "replay.deterministic",
             "pipeline.live-smoke",
         ]
-        hard_failed = [c for c in self.checks if c["check"] in hard and not c["ok"]]
+        hard_set = set(hard) | {"cloud.model-identity"}
+        hard_failed = [
+            c
+            for c in self.checks
+            if c["check"] in hard_set and not c["ok"] and not c.get("overridden")
+        ]
         all_ok = all(c["ok"] for c in self.checks)
         blocked = bool(hard_failed)
         reasons = [c["detail"] for c in self.checks if not c["ok"]]
@@ -282,6 +345,10 @@ def common_attack_context():
     )
 
 
-def run_preflight(experiment_id: str, out_dir: Path) -> dict:
+def run_preflight(
+    experiment_id: str, out_dir: Path, *, allow_unverifiable_identity: bool = False
+) -> dict:
     """Module-level entry point used by run.py / main."""
-    return Preflight(experiment_id, out_dir).run_and_write()
+    return Preflight(
+        experiment_id, out_dir, allow_unverifiable_identity=allow_unverifiable_identity
+    ).run_and_write()

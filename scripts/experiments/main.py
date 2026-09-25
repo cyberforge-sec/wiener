@@ -51,7 +51,7 @@ def plan(experiment_id: str, out_dir: Path) -> dict:
     cfg = {
         "experiment_id": experiment_id,
         "created_at": now_iso(),
-        "preflight_required": ["A1.cloud.credentials", "A1.cloud.handshake", "A1.cloud.model-catalog", "A1.cloud.minimal-completion", "A2.env.recorded", "A3.local.reachable", "A3.local.model-present", "A3.local.minimal-completion", "A4.replay.store", "A4.replay.deterministic", "A5.pipeline.live-smoke"],
+        "preflight_required": ["A1.cloud.credentials", "A1.cloud.handshake", "A1.cloud.model-catalog", "A1.cloud.minimal-completion", "A1.cloud.model-identity", "A2.env.recorded", "A3.local.reachable", "A3.local.model-present", "A3.local.minimal-completion", "A4.replay.store", "A4.replay.deterministic", "A5.pipeline.live-smoke"],
         "modes": ["no_defense", "basic_prompt_defense", "wiener"],
         "num_benign_scenarios": 10,
         "num_malicious_variants": NUM_MALICIOUS_VARIANTS,
@@ -134,9 +134,15 @@ def seed_manifest() -> dict:
     }
 
 
-def stage1(experiment_id: str, out_dir: Path) -> dict:
-    """Phase 1: preflight. Writes preflight.json. Does NOT launch trials."""
-    pre = Preflight(experiment_id, out_dir)
+def stage1(experiment_id: str, out_dir: Path, *, allow_unverifiable_identity: bool = False) -> dict:
+    """Phase 1: preflight. Writes preflight.json. Does NOT launch trials.
+
+    Includes the model-identity gate, so 135 live trials are never spent on a
+    route whose evidence could not be locked.
+    """
+    pre = Preflight(
+        experiment_id, out_dir, allow_unverifiable_identity=allow_unverifiable_identity
+    )
     return pre.run_and_write()
 
 
@@ -168,6 +174,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="authoritative experiment harness")
     parser.add_argument("command", choices=["plan", "preflight", "run"], help="phase to execute")
     parser.add_argument("experiment_id", nargs="?", default=None, help="authoritative_YYYYMMDD_HHMM (auto if omitted)")
+    parser.add_argument(
+        "--allow-unverifiable-identity",
+        action="store_true",
+        help=(
+            "run even when the provider cannot evidence which model served. "
+            "The result is CANDIDATE and cannot be locked: I-13b fails. Use "
+            "only to produce provider-compatibility evidence on purpose."
+        ),
+    )
     args = parser.parse_args(argv)
 
     experiment_id = ensure_experiment_id(args.experiment_id)
@@ -182,12 +197,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "preflight":
-        result = stage1(experiment_id, out_dir)
+        result = stage1(
+            experiment_id, out_dir, allow_unverifiable_identity=args.allow_unverifiable_identity
+        )
         print(json.dumps(result, indent=2))
         return 0 if result["preflight"] == "PASS" else 2
 
     if args.command == "run":
-        result = stage1(experiment_id, out_dir)
+        result = stage1(
+            experiment_id, out_dir, allow_unverifiable_identity=args.allow_unverifiable_identity
+        )
         if result["preflight"] != "PASS":
             print("PREFLIGHT BLOCKED — full experiment refused. See preflight.json.")
             print(json.dumps(result, indent=2))

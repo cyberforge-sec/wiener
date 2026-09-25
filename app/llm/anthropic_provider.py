@@ -62,6 +62,7 @@ class AnthropicProvider:
         transport: httpx.BaseTransport | None = None,
         diag_path: str | None = None,
         provider_label: str | None = None,
+        expected_model: str | None = None,
     ) -> None:
         self._api_key = api_key if api_key is not None else config.ANTHROPIC_API_KEY
         self._base_url = (base_url if base_url is not None else config.ANTHROPIC_BASE_URL).rstrip("/")
@@ -75,6 +76,9 @@ class AnthropicProvider:
         self._response_format = response_format
         self._transport = transport
         self._provider_label = provider_label if provider_label is not None else "anthropic"
+        self._expected_model = (
+            expected_model if expected_model is not None else config.CLOUD_EXPECTED_MODEL
+        ) or None
         diag = diag_path if diag_path is not None else config.CLOUD_DIAG_PATH
         self._diag_path = Path(diag).expanduser() if diag else None
         if self._diag_path is not None and not self._diag_path.is_absolute():
@@ -189,6 +193,7 @@ class AnthropicProvider:
                     temperature=self._temperature,
                     deterministic_requested=self._temperature == 0,
                     endpoint="v1/messages",
+                    declared_model=self._expected_model,
                     extra={"stop_reason": data.get("stop_reason")},
                 )
                 return LLMResponse(

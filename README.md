@@ -53,25 +53,30 @@ release/      Release notes
 
 No portable RAM or disk minimum is claimed because this repository has no validated cross-host measurement.
 
+> **Live evaluation is required for the competition.** Replay is only a setup
+> smoke test and offline safety net; it must not be presented as live evidence.
+
 ### Choose a run mode
 
-The repository does not include your API key or local model. Choose one mode:
+The repository does not include your API key or local model. For the required
+live evaluation, choose Cloud or Local. Replay is for setup verification only:
 
-| Goal | What you provide | `WIENER_LLM_FORCE` |
+| Purpose | What you provide | `WIENER_LLM_FORCE` |
 | --- | --- | --- |
-| Offline evaluation | Nothing beyond the application | `replay` |
-| Live cloud inference | Your own OpenAI-compatible key, base URL, and model | `opencode` |
-| Live local inference | Ollama and a model installed on the same machine | `local` |
-| Automatic selection | Optional cloud and/or local configuration | empty |
+| Setup smoke test / offline verification | Nothing beyond the application | `replay` |
+| **Live evaluation: cloud** | Your own OpenAI-compatible key, base URL, and model | `opencode` |
+| **Live evaluation: local** | Ollama and a model installed on the same machine | `local` |
+| Automatic live selection | Configured cloud and/or local provider | empty |
 
 `opencode` is the legacy internal name for the cloud adapter; the UI labels it
-**Cloud (OpenAI-compatible)**. The checked-in `.env.example` is safe: its cloud
-key is empty and its default is `replay`.
+**Cloud (OpenAI-compatible)**. The checked-in `.env.example` is safe for setup:
+its cloud key is empty and its default is `replay`.
 
 ## 6. Quick Start
 
-The first run is intentionally offline and deterministic. It uses no API key,
-no Ollama, and no network call:
+The first run is intentionally offline and deterministic. It verifies the
+installation only; it is not the required live competition evaluation. It uses
+no API key, no Ollama, and no network call:
 
 ```bash
 git clone https://github.com/cyberforge-sec/wiener.git
@@ -86,10 +91,11 @@ WIENER_LLM_FORCE=replay python -m app.main
 ```
 
 Open `http://localhost:8000/judge`, leave the provider set to **Replay**, and
-run a scenario. Stop the server with `Ctrl+C`. The copied `.env` is safe: its
-cloud key is empty and its provider default is `replay`.
+run a scenario. Stop the server with `Ctrl+C`. The copied `.env` is safe for
+this smoke test: its cloud key is empty and its provider default is `replay`.
 
-To use a live model, edit `.env` using the Cloud or Local section below. To
+Before the live competition evaluation, edit `.env` using the Cloud or Local
+section below and verify `/health` reports that live provider. To
 restore automatic selection, set `WIENER_LLM_FORCE=` after configuring the
 provider you want to try first; the ladder is cloud → local Ollama → replay.
 
@@ -126,8 +132,9 @@ docker build -t wiener:local .
 docker run --rm -p 8000:8000 -e WIENER_LLM_FORCE=replay wiener:local
 ```
 
-The command above is the safest first run. Visit `http://localhost:8000/judge`
-or call `/health` in another terminal. If port 8000 is busy, use `-p 8001:8000`.
+The command above is the safest setup smoke test. It is not the required live
+competition evaluation. Visit `http://localhost:8000/judge` or call `/health` in
+another terminal. If port 8000 is busy, use `-p 8001:8000`.
 
 For a named background container with an inspectable health status:
 
@@ -247,14 +254,16 @@ docker run --rm -p 8000:8000 --add-host=host.docker.internal:host-gateway -e WIE
 ```
 
 `localhost` inside a container means the container itself, not host Ollama.
-Local inference is optional; replay remains available without it. Other local
-runtimes (LM Studio, vLLM, llama.cpp, LocalAI) are not direct local-provider
-backends in this release unless they expose an Ollama-compatible API.
+Ollama is not required for Cloud mode, but it is required if you choose Local
+mode. Replay remains available as a setup fallback, not as the live result.
+Other local runtimes (LM Studio, vLLM, llama.cpp, LocalAI) are not direct
+local-provider backends in this release unless they expose an Ollama-compatible
+API.
 
 | Local choice | Works now? | Notes |
 | --- | --- | --- |
 | Ollama | Yes | Required for the built-in `local` provider; choose any Ollama model that can return the required JSON. |
-| No local runtime | Yes | Use cloud or deterministic replay instead. |
+| No local runtime | Yes | Use live Cloud; replay is only a setup fallback. |
 | LM Studio, vLLM, llama.cpp, LocalAI | Not directly | Add an adapter, or expose an Ollama-compatible endpoint. |
 
 ## 11. Replay Mode
@@ -266,19 +275,20 @@ Replay uses the recorded response store and makes no cloud or Ollama request:
 ./run_replay --scenario ALL --validate --runs 3
 ```
 
-It is deterministic/offline verification, not live LLM inference. Generated
-replay run files are intentionally ignored by Git. This is the recommended
-mode for an evaluator who does not have an API key or Ollama.
+It is deterministic/offline verification, not live LLM inference and not a
+substitute for the required live evaluation. Generated replay run files are
+intentionally ignored by Git. This is the setup smoke test for an evaluator who
+does not have an API key or Ollama.
 
 ## 12. Judge Mode
 
-Start the server and open `/judge`. For a first evaluation choose **Replay**.
-For live inference choose **Cloud** (legacy internal API value: `opencode`) or
-**Local (Ollama)**; these are alternatives, not two models that must run
-together. Choose `normal`, `prompt_injection`, or `adaptive`, then select
-**Run**. **Replay** repeats the latest request and **Reset** clears state.
-Evaluators should inspect the actual provider tier, pipeline stages, policy
-verdict, and simulated-tool result.
+Start the server and open `/judge`. For the required live evaluation choose
+**Cloud** (legacy internal API value: `opencode`) or **Local (Ollama)**; these
+are alternatives, not two models that must run together. Use **Replay** only for
+offline setup checks. Choose `normal`, `prompt_injection`, or `adaptive`, then
+select **Run**. **Replay** repeats the latest request and **Reset** clears
+state. Evaluators should inspect the actual provider tier, pipeline stages,
+policy verdict, and simulated-tool result.
 
 ## 13. API / Endpoints
 
@@ -308,7 +318,8 @@ The health check reports unavailable cloud/Ollama as warnings because replay is 
 ## 15. Verification
 
 - [ ] Application starts and `/health` returns `ok`.
-- [ ] Replay scenarios are deterministic.
+- [ ] Replay scenarios are deterministic (setup smoke test only).
+- [ ] The required live provider is selected and `/health` reports it.
 - [ ] Cloud uses evaluator-provided configuration.
 - [ ] Local mode reaches evaluator-provided Ollama.
 - [ ] The safety boundary remains simulated.
@@ -334,6 +345,6 @@ Never commit `.env`, API keys, tokens, provider diagnostics, runtime logs, or en
 
 ## 18. Project Status
 
-Implemented: FastAPI API, Judge Mode, cloud/local/replay providers, Red AI loop, SOC/Blue/Risk/Policy pipeline, deterministic replay, tests, and simulated tools. Cloud and Ollama are optional evaluator-supplied integrations. All tool execution and dashboard evidence are simulated/PoC artifacts. WIENER is not production-ready.
+Implemented: FastAPI API, Judge Mode, cloud/local/replay providers, Red AI loop, SOC/Blue/Risk/Policy pipeline, deterministic replay, tests, and simulated tools. Cloud and Ollama are the live-evaluation integrations; replay is offline setup verification. All tool execution and dashboard evidence are simulated/PoC artifacts. WIENER is not production-ready.
 
 See [architecture](docs/architecture.md), [setup notes](docs/competition_setup.md), [demo runbook](docs/DEMO_RUNBOOK.md), [contracts](docs/contracts.md), and [benchmark notes](docs/BENCHMARK.md).

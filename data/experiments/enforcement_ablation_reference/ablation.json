@@ -1,8 +1,8 @@
 {
   "experiment_id": "enforcement_ablation_reference",
   "experiment_type": "enforcement_ablation",
-  "completed_at": "2026-09-25T18:51:39.248017+00:00",
-  "created_at": "2026-09-26T01:51:39.248036+07:00",
+  "completed_at": "2026-09-25T19:09:34.662665+00:00",
+  "created_at": "2026-09-26T02:09:34.662681+07:00",
   "provider_requested": "replay",
   "proposal_source": "fixed catalog (deterministic, offline)",
   "scope": "Measures the enforcement layer only. Not comparable to, and never merged into, the authoritative 135-trial UAR/ASR/FIR/UAPR run.",
@@ -313,7 +313,7 @@
       "app/orchestration/pipeline.py": "284175ef18c4427d8c759e728be24f75cfb052e86c01e7577d796981d4decf9c",
       "app/policy_gate/policy_gate.py": "36380371bc09ed9343d5c97772355e82993fa8e8982e783823b4cd4e42a56231",
       "app/present/evidence.py": "3282b518a159b5b598037a503cb9e4e56b23d0aa68ca2503a3d84cb39e04e737",
-      "app/present/render.py": "ff7800b25bae9749b6d23c4a062dc563648cc7cd7485d4cd89eef36ce2a477c0",
+      "app/present/render.py": "dca361636301af620809beb5c112dcf53de80b83838df3aa4baff0437b142add",
       "app/red_ai/attack_logger.py": "6bb669435df8d9b71ee476e8d299d42760682052f57e7542355a6081fb98740c",
       "app/red_ai/loop.py": "34b98216615eb18c1e743bba437a352b19a93fb3e1436ef81170b5c11f8bd978",
       "app/red_ai/mutator.py": "b30e980d35e19dd75dbd4a341d8433c3d36da36f2406ce45b6216dee04d21265",
@@ -337,6 +337,6 @@
       "scripts/experiments/run.py": "8066366a935bab1ffed86d606ad2ffb88532b3f1f0809abcad9ffd3405880676",
       "scripts/experiments/validation.py": "92705569e4508d3ed03738b8b8cdaef58f959904faa6af7d7d2ed073c6f2e39e"
     },
-    "root_hash": "6f41a2d20acbc00c6d74079fa3b0c448761ff0acd08917d4f3f31a3151594842"
+    "root_hash": "5f3276fddb44bd83ffeaaa2d093f803743d13d376a4d51a364502079585d3f86"
   }
 }

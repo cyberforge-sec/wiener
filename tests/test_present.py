@@ -357,3 +357,16 @@ def test_unknown_provenance_when_fingerprint_absent(tmp_path):
     bundle = _load(copy)
     assert bundle.source_provenance["status"] == "UNKNOWN"
     assert bundle.source_provenance["recorded_status"] == "MATCH"
+
+
+def test_dashboard_page_makes_no_external_requests():
+    """The dashboard must render identically offline: no webfont, no CDN.
+
+    Both pages previously pulled Google Fonts, which meant a judge's browser
+    silently contacted a third party on every view of the evidence page.
+    """
+    page = presentation_page(build_evidence_dashboard(load_evidence()))
+    for banned in ("fonts.googleapis.com", "fonts.gstatic.com", "cdn."):
+        assert banned not in page, f"dashboard must not reference {banned}"
+    # System stack, declared in-page.
+    assert "-apple-system" in page

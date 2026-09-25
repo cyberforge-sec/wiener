@@ -4,6 +4,7 @@ import httpx
 
 from ..config import config
 from .base import LLMResponse, ProviderUnavailable
+from .identity import ProviderIdentity
 
 
 def ollama_reachable(host: str, timeout_s: float) -> bool:
@@ -57,26 +58,31 @@ class LocalProvider:
         flattened prompt, and the response records which path was used, so an
         artifact can never imply role separation it did not get.
         """
+        reported: str | None = None
         if self._chat_supported():
-            text = self._complete_chat(system, user)
+            text, reported = self._complete_chat(system, user)
             path = "api/chat"
         else:
-            text = self._complete_generate(f"{system}\n\n{user}")
+            text, reported = self._complete_generate(f"{system}\n\n{user}")
             path = "api/generate"
-        return LLMResponse(
-            text=text,
-            provider=self.name,
-            meta={
-                "model": self._model,
+        # Same four-way identity split as every cloud adapter, so an evidence
+        # row means the same thing whichever rung produced it.
+        identity = ProviderIdentity(
+            provider="ollama",
+            adapter="ollama",
+            requested_model=self._model,
+            provider_reported_model=reported,
+            temperature=self._temperature,
+            deterministic_requested=self._temperature == 0,
+            endpoint=path,
+            extra={
                 "max_tokens": self._max_tokens,
-                "temperature": self._temperature,
-                "deterministic_requested": self._temperature == 0,
-                "endpoint": path,
                 # False means system and user were concatenated into one turn,
                 # so the system prompt had no enforced priority.
                 "role_separation": path == "api/chat",
             },
         )
+        return LLMResponse(text=text, provider=self.name, meta=identity.as_meta())
 
     def _post(self, url: str, payload: dict) -> dict:
         try:
@@ -120,7 +126,7 @@ class LocalProvider:
         self._chat = True
         return True
 
-    def _complete_chat(self, system: str, user: str) -> str:
+    def _complete_chat(self, system: str, user: str) -> tuple[str, str | None]:
         payload = {
             "model": self._model,
             "messages": [
@@ -133,9 +139,9 @@ class LocalProvider:
         }
         data = self._post(f"{self._host.rstrip('/')}/api/chat", payload)
         message = data.get("message") or {}
-        return str(message.get("content", "")).strip()
+        return str(message.get("content", "")).strip(), _reported_model(data)
 
-    def _complete_generate(self, prompt: str) -> str:
+    def _complete_generate(self, prompt: str) -> tuple[str, str | None]:
         payload = {
             "model": self._model,
             "prompt": prompt,
@@ -144,4 +150,12 @@ class LocalProvider:
             "options": {"temperature": self._temperature, "num_predict": self._max_tokens},
         }
         data = self._post(f"{self._host.rstrip('/')}/api/generate", payload)
-        return str(data.get("response", "")).strip()
+        return str(data.get("response", "")).strip(), _reported_model(data)
+
+
+def _reported_model(data: dict) -> str | None:
+    """Ollama echoes the model it loaded. Recorded when present, else unknown."""
+    value = data.get("model")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None

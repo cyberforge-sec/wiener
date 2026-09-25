@@ -13,7 +13,9 @@ from ..red_ai.loop import RedLoop, render_attack
 from ..red_ai.mutator import baseline
 from ..red_ai.seed_loader import AdaptiveSeedLoader, SeedLoader
 
-PROVIDERS = ("opencode", "local", "replay")
+# The cloud TIER is provider-neutral. "opencode" remains accepted as a
+# legacy alias for it so older requests and stored sessions keep working.
+PROVIDERS = ("openai_compatible", "opencode", "local", "replay")
 SCENARIOS = ("normal", "prompt_injection", "adaptive")
 
 # The adversarial seed selected by the attacking scenarios (prompt injection).

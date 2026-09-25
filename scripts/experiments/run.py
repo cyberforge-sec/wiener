@@ -21,7 +21,7 @@ from pathlib import Path
 
 from app.config import config
 from app.experiment.runner import basic_prompt_defense_system_prompt
-from app.llm.opencode_provider import OpenCodeProvider
+from app.llm.factory import CLOUD_TIER, build_cloud_provider
 from app.models import (
     Decision,
     ExperimentMode,
@@ -49,19 +49,25 @@ from .common import (
 from .preflight import run_preflight
 
 
-class TimedOpenCode:
+class TimedCloudProvider:
     """Wrapper honoring the LLMProvider protocol (complete -> LLMResponse).
 
-    The underlying OpenCodeProvider is used verbatim; the measured wall-clock
+    The configured cloud adapter is used verbatim; the measured wall-clock
     duration of each underlying call (Part G) is folded into resp.meta so the
     SOCAgent / Pipeline contract stays intact. Retries inside the provider (the
-    response_format retry path) surface through resp.meta."""
+    response_format retry path) surface through resp.meta.
 
-    name = "opencode"
+    The wrapper's `name` is the provider-neutral TIER, never a vendor, so the
+    recorded `provider_used` says which rung answered without implying the
+    product depends on it. The service actually addressed travels in
+    provider_meta["provider"].
+    """
+
+    name = CLOUD_TIER
 
     def __init__(self) -> None:
-        self._inner = OpenCodeProvider(
-            diag_path=str(ROOT / "data" / "experiments" / "opencode_authoritative_diag.log")
+        self._inner = build_cloud_provider(
+            diag_path=str(ROOT / "data" / "experiments" / "cloud_authoritative_diag.log")
         )
         self.last_meta: dict = {}
 
@@ -115,7 +121,7 @@ def run_trial_via_agent(
         mutation_type=attack.mutation.kind.value if attack.mutation else None,
         attack_payload=None if benign else attack.payload,
         benign_payload_or_context=attack.payload if benign else None,
-        provider_requested="opencode", provider_used="", model="",
+        provider_requested=CLOUD_TIER, provider_used="", model="",
         provider_tier=None,
         fallback_used=False, fallback_reason=None,
         system_prompt_id=sp_id, system_prompt_hash=sp_hash,
@@ -203,7 +209,7 @@ def run_trial_via_agent(
                 rec.target = sock.target
                 rec.confidence = sock.confidence
                 rec.parsed_output = {"action": sock.action.value, "target": sock.target, "confidence": sock.confidence}
-            # The adapter name ("opencode"/"local") is a transport, not a model.
+            # The adapter name is a transport, not a model.
             # Record the model id the provider actually reported; fall back to
             # the tier only when the provider published no model metadata.
             rec.model = str(provider_meta.get("model") or rec.provider_used)
@@ -257,7 +263,7 @@ def build_trial_list(num_iterations: int) -> list[tuple[str, RedAttack, bool]]:
 
 def run(experiment_id: str, out_dir: Path, num_malicious_variants: int) -> list[dict]:
     trials = build_trial_list(num_malicious_variants)
-    provider = TimedOpenCode()
+    provider = TimedCloudProvider()
     done: set[tuple[str, str]] = set()  # (trial_id, mode) pairs
     p = out_dir / "trials.jsonl"
     if p.exists():

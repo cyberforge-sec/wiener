@@ -8,7 +8,7 @@ import pytest
 
 from app.llm.base import LLMResponse, ProviderUnavailable
 from app.llm.local_provider import LocalProvider
-from app.llm.opencode_provider import OpenCodeProvider
+from app.llm.openai_compatible import OpenAICompatibleProvider
 from app.llm.replay_provider import ReplayProvider
 
 # The same logical request for all providers.
@@ -42,21 +42,21 @@ def _local_transport():
 
 
 def test_cloud_provider_contract():
-    provider = OpenCodeProvider(
+    provider = OpenAICompatibleProvider(
         api_key="key", base_url="https://example.invalid/v1", model="m",
         transport=_cloud_transport(),
     )
     resp = provider.complete(SYSTEM, USER)
     assert isinstance(resp, LLMResponse)
     assert resp.text == _GOOD_RESPONSE_TEXT
-    assert resp.provider == "opencode"
+    assert resp.provider == "openai_compatible"
     assert resp.meta["model"] == "m"
     assert resp.meta["temperature"] == 0.0
     assert resp.meta["deterministic_requested"] is True
 
 
 def test_cloud_provider_reports_requested_temperature():
-    provider = OpenCodeProvider(
+    provider = OpenAICompatibleProvider(
         api_key="key", base_url="https://example.invalid/v1", model="m",
         temperature=0.7, transport=_cloud_transport(),
     )
@@ -72,7 +72,7 @@ def test_cloud_provider_handles_trailing_stream_done_sentinel():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=content)
 
-    provider = OpenCodeProvider(
+    provider = OpenAICompatibleProvider(
         api_key="key", base_url="https://example.invalid/v1", model="m",
         transport=httpx.MockTransport(handler),
     )
@@ -87,7 +87,7 @@ def test_cloud_provider_null_content_is_controlled():
             json={"choices": [{"message": {"content": None}}]},
         )
 
-    provider = OpenCodeProvider(
+    provider = OpenAICompatibleProvider(
         api_key="key", base_url="https://example.invalid/v1", model="m",
         transport=httpx.MockTransport(handler),
     )
@@ -105,7 +105,7 @@ def test_cloud_provider_retries_empty_content_then_succeeds():
         content = None if calls == 1 else _GOOD_RESPONSE_TEXT
         return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
 
-    provider = OpenCodeProvider(
+    provider = OpenAICompatibleProvider(
         api_key="key", base_url="https://example.invalid/v1", model="m",
         response_format="json_object", transport=httpx.MockTransport(handler),
     )
@@ -125,7 +125,7 @@ def test_cloud_provider_retries_non_json_when_format_requested():
         content = "Result: not a JSON object" if calls == 1 else _GOOD_RESPONSE_TEXT
         return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
 
-    provider = OpenCodeProvider(
+    provider = OpenAICompatibleProvider(
         api_key="key", base_url="https://example.invalid/v1", model="m",
         response_format="json_object", transport=httpx.MockTransport(handler),
     )
@@ -149,7 +149,7 @@ def test_cloud_provider_sends_response_format_and_retries_when_rejected():
             return httpx.Response(400, json={"error": {"type": "invalid_request_error"}})
         return httpx.Response(200, json={"choices": [{"message": {"content": _GOOD_RESPONSE_TEXT}}]})
 
-    provider = OpenCodeProvider(
+    provider = OpenAICompatibleProvider(
         api_key="key", base_url="https://example.invalid/v1", model="m",
         response_format="json_object",
         transport=httpx.MockTransport(handler),
@@ -169,7 +169,7 @@ def test_cloud_provider_omits_response_format_when_disabled():
         request_bodies.append(body)
         return httpx.Response(200, json={"choices": [{"message": {"content": _GOOD_RESPONSE_TEXT}}]})
 
-    provider = OpenCodeProvider(
+    provider = OpenAICompatibleProvider(
         api_key="key", base_url="https://example.invalid/v1", model="m",
         response_format="",
         transport=httpx.MockTransport(handler),
@@ -188,7 +188,7 @@ def test_cloud_provider_diag_writes_on_failure():
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, json={"choices": [{"message": {"content": None}}]})
 
-        provider = OpenCodeProvider(
+        provider = OpenAICompatibleProvider(
             api_key="key", base_url="https://example.invalid/v1", model="m",
             transport=httpx.MockTransport(handler),
             diag_path=str(diag),
@@ -238,7 +238,7 @@ def test_replay_provider_contract():
 def test_cloud_provider_timeout():
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("timed out")
-    provider = OpenCodeProvider(
+    provider = OpenAICompatibleProvider(
         api_key="key", base_url="https://x/v1", model="m",
         transport=httpx.MockTransport(handler),
     )
@@ -262,7 +262,7 @@ def test_local_provider_timeout():
 def test_cloud_provider_connection_failure():
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("no route")
-    provider = OpenCodeProvider(
+    provider = OpenAICompatibleProvider(
         api_key="key", base_url="https://x/v1", model="m",
         transport=httpx.MockTransport(handler),
     )
@@ -272,7 +272,7 @@ def test_cloud_provider_connection_failure():
 
 
 def test_cloud_provider_auth_failure():
-    provider = OpenCodeProvider(
+    provider = OpenAICompatibleProvider(
         api_key="key", base_url="https://x/v1", model="m",
         transport=httpx.MockTransport(lambda r: httpx.Response(401, json={"error": "unauthorized"})),
     )
@@ -282,14 +282,14 @@ def test_cloud_provider_auth_failure():
 
 
 def test_cloud_provider_missing_api_key_is_controlled():
-    provider = OpenCodeProvider(api_key="", base_url="https://x/v1", model="m")
+    provider = OpenAICompatibleProvider(api_key="", base_url="https://x/v1", model="m")
     with pytest.raises(ProviderUnavailable) as ei:
         provider.complete(SYSTEM, USER)
     assert ei.value.kind == "auth"
 
 
 def test_cloud_provider_malformed_response():
-    provider = OpenCodeProvider(
+    provider = OpenAICompatibleProvider(
         api_key="key", base_url="https://x/v1", model="m",
         transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"unexpected": True})),
     )

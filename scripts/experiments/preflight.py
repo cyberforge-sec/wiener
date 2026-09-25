@@ -16,7 +16,7 @@ import httpx
 
 from app.config import config
 from app.llm.local_provider import LocalProvider, ollama_reachable
-from app.llm.opencode_provider import OpenCodeProvider
+from app.llm.factory import CLOUD_TIER, build_cloud_provider
 from app.llm.parsing import extract_json_object
 from app.orchestration.pipeline import Pipeline
 
@@ -80,7 +80,7 @@ class Preflight:
             handshake_detail = f"HTTP {r.status_code}"
         except httpx.HTTPError as exc:
             handshake_detail = f"{type(exc).__name__}: {exc}"
-        self.add("A1", "opencode.handshake", reachable, handshake_detail, {"latency_ms": _ms(time.perf_counter() - t0)})
+        self.add("A1", "cloud.handshake", reachable, handshake_detail, {"latency_ms": _ms(time.perf_counter() - t0)})
         if not reachable:
             return
 
@@ -98,7 +98,7 @@ class Preflight:
                 served_detail += f"; prefixes={sorted({i.split('/')[0] for i in ids})[:12]}"
         except Exception as exc:  # noqa: BLE001
             served_detail = f"/models probe failed: {type(exc).__name__}: {exc}"
-        self.add("A1", "opencode.model-catalog", served, served_detail, {"gate": "informational", "authoritative": "opencode.minimal-completion"})
+        self.add("A1", "cloud.model-catalog", served, served_detail, {"gate": "informational", "authoritative": "cloud.minimal-completion"})
 
         # 3) Minimal completion through the REAL provider: 3 timed calls, all parseable.
         comp_ok = False
@@ -107,7 +107,7 @@ class Preflight:
         for i in range(3):
             t0 = time.perf_counter()
             try:
-                resp = OpenCodeProvider().complete(MINIMAL_SYS, MINIMAL_JSON_PROBE)
+                resp = build_cloud_provider().complete(MINIMAL_SYS, MINIMAL_JSON_PROBE)
                 dur = _ms(time.perf_counter() - t0)
                 payload = {"call": i, "duration_ms": dur, "text_len": len(resp.text), "provider": resp.provider, "model": resp.meta.get("model")}
                 if response_contains_json(resp.text):
@@ -127,11 +127,11 @@ class Preflight:
             f"{sum(1 for c in calls if c.get('valid_json'))}/3 calls returned valid non-null JSON; "
             f"dur_ms={durations}"
         )
-        self.add("A1", "opencode.minimal-completion", comp_ok, comp_detail, {"calls": calls})
+        self.add("A1", "cloud.minimal-completion", comp_ok, comp_detail, {"calls": calls})
 
     def a2_env(self) -> None:
         cfg = {
-            "provider": "opencode",
+            "provider": CLOUD_TIER,
             "base_url": config.CLOUD_BASE_URL,
             "model": config.CLOUD_MODEL,
             "timeout_s": config.LLM_TIMEOUT_S,
@@ -194,7 +194,7 @@ class Preflight:
         degraded = False
         detail = ""
         try:
-            provider = OpenCodeProvider()
+            provider = build_cloud_provider()
             pipe = Pipeline(llm=provider)
             stages.append("soc_agent")
             t0 = time.perf_counter()
@@ -210,7 +210,7 @@ class Preflight:
                 f"risk={result.risk.risk_score}; tool_executed={result.tool_result.executed if result.tool_result else None}; "
                 f"duration_ms={duration_ms}"
             )
-            ok = (not degraded) and soc_provider == "opencode"
+            ok = (not degraded) and soc_provider == CLOUD_TIER
         except Exception as exc:  # noqa: BLE001
             detail = f"pipeline smoke failed: {type(exc).__name__}: {str(exc)[:160]}"
             ok = False
@@ -220,15 +220,15 @@ class Preflight:
             "pipeline.live-smoke",
             ok,
             detail,
-            {"stages_reached": stages, "provider_used": soc_provider, "provider_requested": "opencode", "degraded": degraded, "duration_ms": duration_ms},
+            {"stages_reached": stages, "provider_used": soc_provider, "provider_requested": CLOUD_TIER, "degraded": degraded, "duration_ms": duration_ms},
         )
 
     def summary(self) -> dict:
         # Every required item is a hard gate; model-catalog is not (router serves oc/*).
         hard = [
-            "opencode.credentials",
-            "opencode.handshake",
-            "opencode.minimal-completion",
+            "cloud.credentials",
+            "cloud.handshake",
+            "cloud.minimal-completion",
             "env.recorded",
             "local.reachable",
             "local.model-present",

@@ -113,6 +113,19 @@ moving UAR, which is exactly why both are reported.
 - **Not a claim about a specific model.** The archived run was served by an
   OpenAI-compatible gateway. A different model, a different gateway, or a
   different system prompt will produce different ASR/UAR values.
+- **Model identity must be verifiable, or the run cannot be locked.** The
+  provider layer records the requested id and the id the provider reports
+  separately. If a gateway answers with a *different* id than was requested,
+  it is rewriting ids, so neither value identifies the backing model:
+  `model_identity_reliable` is false and invariant `I-13b` fails, which blocks
+  the lock. An unverified model identity is not shipped with a caveat.
+  This is not hypothetical: the development gateway was observed answering
+  `oc/big-pickle` with `"model": "big-pickle"`, and advertising 111 models of
+  which none completed a request. To be precise: the request identifies the
+  served model as `big-pickle`, and OpenCode publicly lists `big-pickle` as an
+  OpenCode Zen model. The gateway gives no independent evidence of the backing
+  model behind that route, which is why the run is blocked from locking rather
+  than accepted with a caveat.
 - **Not a determinism claim.** The archived run records no decoding
   temperature in any row, and 90 of 135 rows record a transport name
   (`opencode`) in the `model` field rather than a model id. The current

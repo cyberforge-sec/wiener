@@ -21,8 +21,9 @@ def resolve_provider(name: str, *, replay_dir=None) -> LLMProvider:
         from ..llm.local_provider import LocalProvider
 
         return LocalProvider()
-    if name == "opencode":
-        from ..llm.opencode_provider import OpenCodeProvider
+    if name in ("opencode", "openai_compatible", "cloud"):
+        # Provider-neutral: the configured cloud adapter, whatever it is.
+        from ..llm.factory import build_cloud_provider
 
-        return OpenCodeProvider()
+        return build_cloud_provider()
     raise ExperimentConfigError(f"unknown provider: {name!r}")

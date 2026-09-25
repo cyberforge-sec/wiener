@@ -40,12 +40,27 @@ def _env(primary: str, legacy: str, default: str = "") -> str:
 
 @dataclass(frozen=True)
 class Config:
-    LLM_FORCE: str = os.getenv("WIENER_LLM_FORCE", "")  # opencode | local | replay | ""
+    # Tier selection. The cloud tier is provider-neutral; "opencode" is a
+    # legacy alias for it. Empty = automatic ladder.
+    LLM_FORCE: str = os.getenv("WIENER_LLM_FORCE", "")  # cloud (or "opencode") | local | replay | ""
     LLM_TIMEOUT_S: float = float(os.getenv("WIENER_LLM_TIMEOUT_S", "30"))
 
     CLOUD_API_KEY: str = _env("WIENER_CLOUD_API_KEY", "WIENER_OPENCODE_API_KEY")
     CLOUD_BASE_URL: str = _env("WIENER_CLOUD_BASE_URL", "WIENER_OPENCODE_BASE_URL", "https://api.openai.com/v1")
     CLOUD_MODEL: str = _env("WIENER_CLOUD_MODEL", "WIENER_OPENCODE_MODEL", "gpt-4o-mini")
+    # Which service the CLOUD_* settings address (opencode, openai, groq,
+    # openrouter, ...). This is PROVENANCE, recorded in every evidence row: the
+    # adapter and the security layer never branch on it.
+    CLOUD_PROVIDER_LABEL: str = _env("WIENER_CLOUD_PROVIDER_LABEL", "WIENER_OPENCODE_PROVIDER", "openai_compatible")
+    # Which adapter handles the cloud tier: "openai_compatible" (any
+    # OpenAI-shaped endpoint) or "anthropic" (native Messages API). The
+    # default targets the standard shape so no configuration is needed.
+    CLOUD_ADAPTER: str = os.getenv("WIENER_CLOUD_ADAPTER", "openai_compatible")
+    # Native Anthropic rung, used only when CLOUD_ADAPTER=anthropic.
+    ANTHROPIC_API_KEY: str = os.getenv("WIENER_ANTHROPIC_API_KEY", "")
+    ANTHROPIC_BASE_URL: str = os.getenv("WIENER_ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+    ANTHROPIC_MODEL: str = os.getenv("WIENER_ANTHROPIC_MODEL", "claude-sonnet-4-6")
+    ANTHROPIC_MAX_TOKENS: int = int(os.getenv("WIENER_ANTHROPIC_MAX_TOKENS", "500"))
     # Strict/small models become more predictable at lower temperature.
     CLOUD_TEMPERATURE: float = float(_env("WIENER_CLOUD_TEMPERATURE", "WIENER_OPENCODE_TEMPERATURE", "0.0"))
     # Force structured JSON decoding when supported; empty disables.

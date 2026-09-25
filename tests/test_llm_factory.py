@@ -67,10 +67,10 @@ def _isolate(monkeypatch):
 
 
 def test_transient_cloud_failure_demotes_cached_provider_to_local(monkeypatch):
-    cloud = _StubProvider("opencode", fail_kind="timeout")
+    cloud = _StubProvider("openai_compatible", fail_kind="timeout")
 
     def fake_build(name, *, strict_replay=False):
-        return cloud if name == "opencode" else _StubProvider(name)
+        return cloud if name == "openai_compatible" else _StubProvider(name)
 
     monkeypatch.setattr(factory, "_build", fake_build)
 
@@ -93,7 +93,7 @@ def test_cloud_cooldown_skips_cloud_then_self_heals(monkeypatch, clock):
     monkeypatch.setattr(factory, "_build", fake_build)
 
     # t=100: a cloud outage starts the cloud cooldown.
-    factory.fail_provider(tier="opencode")
+    factory.fail_provider(tier="openai_compatible")
     assert factory.get_llm().name == "local"
     assert built == ["local"]
 
@@ -106,15 +106,15 @@ def test_cloud_cooldown_skips_cloud_then_self_heals(monkeypatch, clock):
     # t=200: cooldown expired; a local fault retries cloud without restarting the window.
     clock.now += 80.0
     factory.fail_provider(tier="local")
-    assert factory.get_llm().name == "opencode"
-    assert built == ["local", "local", "opencode"]
+    assert factory.get_llm().name == "openai_compatible"
+    assert built == ["local", "local", "openai_compatible"]
 
 
 def test_malformed_response_keeps_current_tier(monkeypatch):
-    cloud = _StubProvider("opencode", fail_kind="malformed")
+    cloud = _StubProvider("openai_compatible", fail_kind="malformed")
 
     def fake_build(name, *, strict_replay=False):
-        return cloud if name == "opencode" else _StubProvider(name)
+        return cloud if name == "openai_compatible" else _StubProvider(name)
 
     monkeypatch.setattr(factory, "_build", fake_build)
 
@@ -128,10 +128,10 @@ def test_malformed_response_keeps_current_tier(monkeypatch):
 
 
 def test_invalid_model_json_keeps_current_tier(monkeypatch):
-    cloud = _StubProvider("opencode", valid_text=False)
+    cloud = _StubProvider("openai_compatible", valid_text=False)
 
     def fake_build(name, *, strict_replay=False):
-        return cloud if name == "opencode" else _StubProvider(name)
+        return cloud if name == "openai_compatible" else _StubProvider(name)
 
     monkeypatch.setattr(factory, "_build", fake_build)
 
@@ -142,11 +142,11 @@ def test_invalid_model_json_keeps_current_tier(monkeypatch):
 
 
 def test_sustained_outage_falls_to_replay_without_cloud_retry(monkeypatch):
-    cloud = _StubProvider("opencode", fail_kind="timeout")
+    cloud = _StubProvider("openai_compatible", fail_kind="timeout")
     local = _StubProvider("local", fail_kind="timeout")
 
     def fake_build(name, *, strict_replay=False):
-        if name == "opencode":
+        if name == "openai_compatible":
             return cloud
         if name == "local":
             return local
@@ -165,10 +165,10 @@ def test_sustained_outage_falls_to_replay_without_cloud_retry(monkeypatch):
 
 
 def test_sustained_outage_resolves_local_after_cloud_cooldown(monkeypatch):
-    cloud = _StubProvider("opencode", fail_kind="timeout")
+    cloud = _StubProvider("openai_compatible", fail_kind="timeout")
 
     def fake_build(name, *, strict_replay=False):
-        return cloud if name == "opencode" else _StubProvider(name)
+        return cloud if name == "openai_compatible" else _StubProvider(name)
 
     monkeypatch.setattr(factory, "_build", fake_build)
 
@@ -182,7 +182,7 @@ def test_forced_cloud_ignores_cooldown(monkeypatch):
     monkeypatch.setattr(
         factory,
         "config",
-        SimpleNamespace(LLM_FORCE="opencode", LOCAL_HOST="http://localhost:11434"),
+        SimpleNamespace(LLM_FORCE="openai_compatible", LOCAL_HOST="http://localhost:11434"),
     )
 
     def fake_build(name, *, strict_replay=False):
@@ -190,33 +190,33 @@ def test_forced_cloud_ignores_cooldown(monkeypatch):
 
     monkeypatch.setattr(factory, "_build", fake_build)
 
-    factory.fail_provider(tier="opencode")
+    factory.fail_provider(tier="openai_compatible")
     # Explicit operator pin wins over the cooldown.
-    assert factory.get_llm().name == "opencode"
+    assert factory.get_llm().name == "openai_compatible"
 
 
 def test_active_instance_is_cached_until_demoted(monkeypatch):
-    cloud = _StubProvider("opencode")
+    cloud = _StubProvider("openai_compatible")
     built: list[str] = []
 
     def fake_build(name, *, strict_replay=False):
         built.append(name)
-        return cloud if name == "opencode" else _StubProvider(name)
+        return cloud if name == "openai_compatible" else _StubProvider(name)
 
     monkeypatch.setattr(factory, "_build", fake_build)
 
     a = factory.get_llm()
     b = factory.get_llm()
     assert a is b is cloud
-    assert built == ["opencode"]
+    assert built == ["openai_compatible"]
 
     agent = SOCAgent(a)
     out, _, provider = agent.analyze(make_ctx())
     assert out.action == Action.GET_LOGS
-    assert provider == "opencode"
+    assert provider == "openai_compatible"
     # Success → no demotion, cache stays warm.
     assert factory.get_llm() is cloud
-    assert built == ["opencode"]
+    assert built == ["openai_compatible"]
 
 
 def test_resolve_llm_demo_path_unaffected_by_cache_and_cooldown(monkeypatch):
@@ -228,8 +228,8 @@ def test_resolve_llm_demo_path_unaffected_by_cache_and_cooldown(monkeypatch):
 
     monkeypatch.setattr(factory, "_build", fake_build)
 
-    factory.fail_provider(tier="opencode")
+    factory.fail_provider(tier="openai_compatible")
     # Judge path is per-request: an active cloud cooldown never drops an explicit preference.
     prov = factory.resolve_llm("opencode")
-    assert prov.name == "opencode"
-    assert built == ["opencode"]
+    assert prov.name == "openai_compatible"
+    assert built == ["openai_compatible"]

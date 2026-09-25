@@ -21,7 +21,11 @@ WIENER = ExperimentMode.WIENER
 
 # Friendly labels for known provider tiers. Unknown names stay verbatim.
 PROVIDER_LABELS = {
-    "opencode": "OpenCode",
+    # Historical tier name -> display label. The tier is a configurable
+    # adapter, so the label names the capability, not a vendor.
+    "openai_compatible": "Cloud",
+    "opencode": "Cloud",
+    "anthropic": "Cloud",
     "local": "Qwen Local",
     "replay": "Replay",
 }

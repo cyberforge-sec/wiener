@@ -7,7 +7,7 @@ code_fingerprint.json). The status is computed, never edited by hand.
 
 The lock gate mirrors the strict validation contract:
 
-  * validation 16/16 PASS
+  * every declared validation invariant PASS
   * 135 records / 45 per mode
   * no duplicate trial ids per mode, no gaps
   * schema + provenance fields complete
@@ -294,7 +294,7 @@ def write_evidence_manifest(out_dir: Path) -> dict:
                 "code_fingerprint.json": sha(fp_path),
             },
             "gates": {
-                "validation_16_of_16": False,
+                "validation_all_invariants_pass": False,
                 "trial_counts_135_and_45_per_mode": False,
                 "metrics_independent_recompute_match": False,
                 "provenance_clean": False,
@@ -321,10 +321,15 @@ def write_evidence_manifest(out_dir: Path) -> dict:
     inv_list = list(invariants.values()) if isinstance(invariants, dict) else invariants
     pass_count = sum(1 for inv in inv_list if isinstance(inv, dict) and inv.get("status") == "PASS")
     fail_ids = [inv.get("id") for inv in inv_list if isinstance(inv, dict) and inv.get("status") != "PASS"]
+    # The gate reads the invariant COUNT from validation.json instead of
+    # hardcoding 16, so adding a check (e.g. I-06b latency deltas, I-13b model
+    # identity) cannot silently keep an older, weaker checklist looking locked.
+    expected_invariants = int(validation.get("invariants_total") or 0)
     validation_ok = (
         validation.get("validation_status") == "PASS"
-        and pass_count == 16
-        and len(inv_list) == 16
+        and expected_invariants > 0
+        and pass_count == expected_invariants
+        and len(inv_list) == expected_invariants
         and not fail_ids
     )
 
@@ -341,7 +346,7 @@ def write_evidence_manifest(out_dir: Path) -> dict:
     prov_status, prov_issues, temperatures = _provenance(rows, artifact_hashes["trials.jsonl"])
 
     gates = {
-        "validation_16_of_16": validation_ok,
+        "validation_all_invariants_pass": validation_ok,
         "trial_counts_135_and_45_per_mode": counts_ok,
         "metrics_independent_recompute_match": metrics_match,
         "provenance_clean": prov_status == "CLEAN",

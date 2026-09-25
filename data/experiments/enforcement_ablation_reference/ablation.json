@@ -1,8 +1,8 @@
 {
   "experiment_id": "enforcement_ablation_reference",
   "experiment_type": "enforcement_ablation",
-  "completed_at": "2026-09-25T18:40:05.908756+00:00",
-  "created_at": "2026-09-26T01:40:05.908772+07:00",
+  "completed_at": "2026-09-25T18:51:39.248017+00:00",
+  "created_at": "2026-09-26T01:51:39.248036+07:00",
   "provider_requested": "replay",
   "proposal_source": "fixed catalog (deterministic, offline)",
   "scope": "Measures the enforcement layer only. Not comparable to, and never merged into, the authoritative 135-trial UAR/ASR/FIR/UAPR run.",
@@ -312,8 +312,8 @@
       "app/models.py": "9e4798529948dcf546111a06a15230d3c52cee7d0499cd167da37d5a639348a7",
       "app/orchestration/pipeline.py": "284175ef18c4427d8c759e728be24f75cfb052e86c01e7577d796981d4decf9c",
       "app/policy_gate/policy_gate.py": "36380371bc09ed9343d5c97772355e82993fa8e8982e783823b4cd4e42a56231",
-      "app/present/evidence.py": "ea04ac51f5ebc9ae60e9190e5d75ab8aac7acb35b40dddeacd1b8a6d83ab87cd",
-      "app/present/render.py": "bb62457eea8334e1eda85e0d5109c4c374b8c973827c9a05e28d12f15167a8b1",
+      "app/present/evidence.py": "3282b518a159b5b598037a503cb9e4e56b23d0aa68ca2503a3d84cb39e04e737",
+      "app/present/render.py": "ff7800b25bae9749b6d23c4a062dc563648cc7cd7485d4cd89eef36ce2a477c0",
       "app/red_ai/attack_logger.py": "6bb669435df8d9b71ee476e8d299d42760682052f57e7542355a6081fb98740c",
       "app/red_ai/loop.py": "34b98216615eb18c1e743bba437a352b19a93fb3e1436ef81170b5c11f8bd978",
       "app/red_ai/mutator.py": "b30e980d35e19dd75dbd4a341d8433c3d36da36f2406ce45b6216dee04d21265",
@@ -330,13 +330,13 @@
       "app/tools/tool_executor.py": "80a9a868a75b369500dfc4ab044805b8dba6f70cdd406e675360fbbf9d6bc6e7",
       "scripts/experiments/common.py": "fa60de0c4c5cda1e93558be4aab9157a2acfbe6ff1767110934a88430209fc71",
       "scripts/experiments/enforcement_ablation.py": "4031590663b098b86b96ad18f0effc418bfcf9c5127a5543bb59c712e64ddcc4",
-      "scripts/experiments/lock.py": "06abc161d72fe6c21978b871868c908f13c0d158a771ae6524b94eba18ecf074",
+      "scripts/experiments/lock.py": "098a138e6757f2a922e5f0debcabd18dbbf749885eec939c8564efa3883041dc",
       "scripts/experiments/main.py": "9fc2526502adde201694415ef8ec07141d38f0e0906e3ce8cdcf90a60d28ee3c",
       "scripts/experiments/metrics.py": "fab5ea0568d558a7f2c87225161d8c92fe130c9ccb7c8f2431da2878fb0dc1e2",
       "scripts/experiments/preflight.py": "ea06e274a0473d64b902af9268bbc147f49ca696903890310fa8e7b25e686a96",
       "scripts/experiments/run.py": "8066366a935bab1ffed86d606ad2ffb88532b3f1f0809abcad9ffd3405880676",
-      "scripts/experiments/validation.py": "2abdceef1ee8bde7138f4facc17b48fc5bfb9c505548aa0de5b28cac5c7d6e5c"
+      "scripts/experiments/validation.py": "92705569e4508d3ed03738b8b8cdaef58f959904faa6af7d7d2ed073c6f2e39e"
     },
-    "root_hash": "bf01e13ec2b7f66ebff4eedc94377c39b3d6b9c9c59b415b13dcbad653667d38"
+    "root_hash": "6f41a2d20acbc00c6d74079fa3b0c448761ff0acd08917d4f3f31a3151594842"
   }
 }

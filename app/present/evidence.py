@@ -402,6 +402,53 @@ def _derive_status(
     return "CANDIDATE"
 
 
+def _current_source_provenance(dir_path: Path, manifest: dict) -> dict[str, Any]:
+    """Recompute source provenance for the tree the dashboard is served from.
+
+    Uses the stored code fingerprint, compares it to the current tree, and
+    keeps the manifest's value only as the `recorded_*` provenance trail. If
+    the comparison cannot be performed (fingerprint file missing, hashing
+    unavailable), the status is UNKNOWN rather than a borrowed MATCH.
+    """
+    stored = manifest.get("source_provenance") or {}
+    recorded_status = str(stored.get("status") or "").upper()
+    fingerprint_path = dir_path / "code_fingerprint.json"
+    try:
+        from scripts.experiments.lock import fingerprint_status
+
+        if not fingerprint_path.exists():
+            return {
+                "status": "UNKNOWN",
+                "recorded_status": recorded_status or None,
+                "note": (
+                    "code_fingerprint.json is absent, so this run cannot be "
+                    "compared to the current source tree"
+                ),
+            }
+        result = fingerprint_status(json.loads(fingerprint_path.read_text(encoding="utf-8")))
+    except Exception as exc:  # noqa: BLE001 - never let provenance break the page
+        return {
+            "status": "UNKNOWN",
+            "recorded_status": recorded_status or None,
+            "note": f"source provenance could not be recomputed: {type(exc).__name__}: {exc}",
+        }
+    result["recorded_status"] = recorded_status or None
+    if result.get("status") == "MATCH":
+        result["note"] = "Fingerprint matches the current source tree."
+    else:
+        changed = len(result.get("mismatched_files") or [])
+        added = len(result.get("added_files") or [])
+        removed = len(result.get("removed_files") or [])
+        result["note"] = (
+            "This evidence was produced by an earlier revision of the code "
+            f"({changed} file(s) changed, {added} added, {removed} removed "
+            "since it was locked). It is retained as historical evidence and "
+            "must be re-run before it can be presented as a result of the "
+            "current tree."
+        )
+    return result
+
+
 # Loader: reads ONLY the locked artifacts.
 def _load(dir_path: Path) -> EvidenceBundle:
     required = ("trials.jsonl", "metrics.json")
@@ -432,6 +479,13 @@ def _load(dir_path: Path) -> EvidenceBundle:
     locked_at = manifest.get("locked_at")
     code_root = (manifest.get("code_fingerprint") or {}).get("root_hash")
     artifact_hashes = manifest.get("artifact_hashes")
+
+    # Source provenance is RECOMPUTED against the current tree, never read as
+    # a historical claim from the manifest. The manifest's own value was true
+    # when the run was locked; after any code change it is a historical fact,
+    # and presenting it as the current state would be exactly the kind of
+    # stale "VERIFIED" claim this layer exists to prevent.
+    source_provenance = _current_source_provenance(dir_path, manifest)
 
     modes: tuple[str, ...] = tuple(_MODE_ORDER)
     by_mode_rows = metrics.get("by_mode", {})
@@ -538,7 +592,7 @@ def _load(dir_path: Path) -> EvidenceBundle:
         locked_at=locked_at,
         code_fingerprint_root=code_root,
         artifact_hashes=artifact_hashes,
-        source_provenance=manifest.get("source_provenance") or {},
+        source_provenance=source_provenance,
         recompute_diffs=tuple(manifest.get("recompute_diffs") or ()),
     )
 

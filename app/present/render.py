@@ -161,7 +161,14 @@ def _evidence_sound(bundle: EvidenceBundle) -> bool:
 def _locked_badge(bundle: EvidenceBundle) -> str:
     if not _evidence_sound(bundle):
         if bundle.evidence_status == "LOCKED_VERIFIED":
-            return '<div class="locked locked--candidate"><b></b>ARTIFACTS LOCKED · REVIEW REQUIRED</div>'
+            source = _source_status(bundle)
+            if source == "stale":
+                label = "ARTIFACTS INTACT · EARLIER REVISION"
+            elif source == "unknown":
+                label = "ARTIFACTS INTACT · TREE NOT COMPARABLE"
+            else:
+                label = "ARTIFACTS LOCKED · REVIEW REQUIRED"
+            return f'<div class="locked locked--candidate"><b></b>{label}</div>'
         return '<div class="locked locked--candidate"><b></b>CANDIDATE EVIDENCE</div>'
     return (
         '<div class="locked"><b></b>LOCKED EVIDENCE · '
@@ -295,18 +302,26 @@ def _locked_at_lines(raw: str | None) -> str:
         return f"<i>{_esc(raw)}</i>"
 
 
+def _provenance_status_line(bundle: EvidenceBundle) -> str:
+    """One honest sentence about whether the artifacts describe THIS tree."""
+    sound = _evidence_sound(bundle)
+    if sound:
+        return "STATUS: VERIFIED SOUND"
+    source = _source_status(bundle)
+    if bundle.evidence_status == "LOCKED_VERIFIED" and source == "stale":
+        return "STATUS: ARTIFACTS INTACT · PRODUCED BY AN EARLIER REVISION"
+    if bundle.evidence_status == "LOCKED_VERIFIED" and source == "unknown":
+        return "STATUS: ARTIFACTS INTACT · SOURCE TREE NOT COMPARABLE"
+    if bundle.evidence_status == "LOCKED_VERIFIED":
+        return "STATUS: ARTIFACTS LOCKED · REVIEW REQUIRED"
+    return "STATUS: CANDIDATE EVIDENCE"
+
+
 def _provenance(bundle: EvidenceBundle) -> str:
     locked = bundle.evidence_status == "LOCKED_VERIFIED"
     sound = _evidence_sound(bundle)
     source_status = _source_status(bundle)
-    if sound:
-        status_line = "STATUS: VERIFIED SOUND"
-    elif locked and source_status == "stale":
-        status_line = "STATUS: ARTIFACTS LOCKED · SOURCE TREE STALE"
-    elif locked:
-        status_line = "STATUS: ARTIFACTS LOCKED · REVIEW REQUIRED"
-    else:
-        status_line = "STATUS: CANDIDATE EVIDENCE"
+    status_line = _provenance_status_line(bundle)
 
     wiener = bundle.by_mode[ExperimentMode.WIENER.value]
     incorrect = wiener.incorrect_interventions
@@ -316,7 +331,11 @@ def _provenance(bundle: EvidenceBundle) -> str:
     validation_class = "pass" if sound else "candidate"
     lock_phrase = "AUTHORITATIVE DATA LOCKED" if sound else "AUTHORITATIVE DATA NOT VERIFIED"
     source = bundle.source_provenance or {}
-    source_label = "MATCH" if source_status == "match" else source_status.upper()
+    source_label = {
+        "match": "MATCH",
+        "stale": "EARLIER REVISION",
+        "unknown": "NOT COMPARABLE",
+    }.get(source_status, (source_status.upper() if source_status != "unknown" else "UNKNOWN"))
     evidence_row = f'<div class="manifest-item"><span>EVIDENCE STATUS</span><b class="pass pill">{_esc(bundle.evidence_status)}</b></div>'
     if locked:
         evidence_row += (
@@ -324,7 +343,12 @@ def _provenance(bundle: EvidenceBundle) -> str:
             f'<span>LOCKED AT</span><b class="ts">{_locked_at_lines(bundle.locked_at)}</b></div>'
         )
     code_row = f'<div class="manifest-item"><span>CODE FINGERPRINT</span><b data-fingerprint-root="{_attr(bundle.code_fingerprint_root)}">{_esc(bundle.code_fingerprint_root or "—")}</b></div>'
-    source_row = f'<div class="manifest-item"><span>SOURCE TREE</span><b data-source-provenance="{_attr(source_status)}">{_esc(source_label)}</b></div>'
+    source_title = _esc(str(source.get("note") or ""))
+    source_row = (
+        f'<div class="manifest-item"><span>SOURCE TREE</span>'
+        f'<b data-source-provenance="{_attr(source_status)}" title="{source_title}">'
+        f'{_esc(source_label)}</b></div>'
+    )
     status_row = f'{evidence_row}{code_row}{source_row}'
     artifact_row = ""
     if bundle.artifact_hashes:

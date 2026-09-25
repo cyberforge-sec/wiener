@@ -16,11 +16,14 @@ rechecks that authority and never touches real infrastructure.
 
 ## Provider layer
 
-`app/llm/factory.py` resolves the downward ladder `opencode → local → replay`.
-`OpenCodeProvider` calls a user-configured OpenAI-compatible cloud endpoint;
+`app/llm/factory.py` resolves the downward ladder `cloud → local → replay`
+(the legacy internal cloud ID is `opencode`). `OpenCodeProvider` calls a
+user-configured OpenAI-compatible cloud endpoint; it does not require an
+OpenCode account and can call direct OpenAI or another compatible gateway.
 `LocalProvider` calls a user-configured Ollama `/api/generate` endpoint; and
-`ReplayProvider` reads hash-keyed recorded responses. The cloud key is never
-hardcoded. If a tier is unavailable, the next tier is tried; Judge Mode uses
+`ReplayProvider` reads hash-keyed recorded responses. Ollama is the only
+directly implemented local runtime in this release; cloud and replay do not
+require it. The cloud key is never hardcoded. If a tier is unavailable, the next tier is tried; Judge Mode uses
 strict replay so a missing recording fails loudly rather than fabricating a
 live-looking answer.
 

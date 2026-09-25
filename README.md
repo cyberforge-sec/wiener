@@ -19,7 +19,10 @@ Attacker / Input → SOC Agent → Trajectory Engine → Blue AI → Risk Engine
 - **Policy Gate:** returns `ALLOW`, `REVIEW`, or `BLOCK`.
 - **Tool layer:** acts only after `ALLOW`, and labels every result simulated.
 
-The provider ladder fails downward: cloud (`opencode`) → Ollama (`local`) → deterministic `replay`. The UI reports the tier actually used.
+The provider ladder fails downward: cloud → local Ollama → deterministic
+`replay`. `opencode` is only the legacy internal identifier for the cloud
+option; it does **not** require an OpenCode account or model. The UI reports
+the tier actually used.
 
 ## 3. Safety Boundary
 
@@ -44,7 +47,8 @@ release/      Release notes
   application minimum enforced by the health check. Use Docker when a matching
   Python environment is unavailable.
 - Docker Engine for Docker use only.
-- Ollama for local inference only; the example model is `qwen2.5:1.5b`.
+- Ollama for local inference only; it is the currently implemented local
+  provider API. The example model is `qwen2.5:1.5b`.
 - Network for cloud inference only. Replay works offline.
 
 No portable RAM or disk minimum is claimed because this repository has no validated cross-host measurement.
@@ -104,7 +108,11 @@ Never bake `.env`, keys, or models into the image; `.dockerignore` excludes secr
 
 ## 9. Cloud LLM Setup
 
-The cloud adapter uses an OpenAI-compatible chat-completions API. Copy `.env.example` to `.env` and insert credentials belonging to the evaluator:
+The cloud adapter uses an OpenAI-compatible chat-completions API. **OpenCode
+is not required.** Use direct OpenAI credentials or any provider/gateway that
+implements compatible `chat/completions`; the `WIENER_OPENCODE_*` environment
+variable names are retained only for backwards compatibility. Copy
+`.env.example` to `.env` and insert credentials belonging to the evaluator:
 
 ```env
 WIENER_OPENCODE_API_KEY=your_api_key_here
@@ -115,9 +123,12 @@ WIENER_LLM_TIMEOUT_S=30
 
 `WIENER_OPENCODE_TEMPERATURE` and `WIENER_OPENCODE_RESPONSE_FORMAT` are optional. An empty key skips cloud; an unavailable cloud tier falls to local then replay. Do not commit `.env`.
 
-## 10. Local LLM Setup
+## 10. Local LLM Setup (Ollama)
 
-For a native run, install/start Ollama and pull the selected model:
+The local provider currently calls the Ollama HTTP API (`/api/generate`), so
+**Ollama is required if you select local mode**. It is not required for cloud
+or replay mode. For a native local run, install/start Ollama and pull the
+selected model:
 
 ```bash
 ollama serve
@@ -131,7 +142,10 @@ Configure `WIENER_LOCAL_HOST`, `WIENER_LOCAL_MODEL`, `WIENER_LOCAL_TIMEOUT_S`, `
 docker run --rm -p 8000:8000 --add-host=host.docker.internal:host-gateway -e WIENER_LOCAL_HOST=http://host.docker.internal:11434 -e WIENER_LOCAL_MODEL=qwen2.5:1.5b wiener:local
 ```
 
-`localhost` inside a container means the container itself, not host Ollama. Local inference is optional; replay remains available without it.
+`localhost` inside a container means the container itself, not host Ollama.
+Local inference is optional; replay remains available without it. Other local
+runtimes (LM Studio, vLLM, llama.cpp, LocalAI) are not direct local-provider
+backends in this release unless they expose an Ollama-compatible API.
 
 ## 11. Replay Mode
 
@@ -146,7 +160,11 @@ It is deterministic/offline verification, not live LLM inference. Generated repl
 
 ## 12. Judge Mode
 
-Start the server and open `/judge`. Choose `opencode`, `local`, or `replay`; choose `normal`, `prompt_injection`, or `adaptive`; then select **Run**. **Replay** repeats the latest request and **Reset** clears state. Evaluators should inspect the actual provider tier, pipeline stages, policy verdict, and simulated-tool result.
+Start the server and open `/judge`. Choose **Cloud** (internal API value:
+`opencode`), **Local (Ollama)**, or `replay`; choose `normal`,
+`prompt_injection`, or `adaptive`; then select **Run**. **Replay** repeats the
+latest request and **Reset** clears state. Evaluators should inspect the actual
+provider tier, pipeline stages, policy verdict, and simulated-tool result.
 
 ## 13. API / Endpoints
 

@@ -23,7 +23,11 @@ from .judge_mode import (
     trial_label,
 )
 
-_PROVIDER_LABELS = {"opencode": "OpenCode (Cloud)", "local": "Qwen Local", "replay": "Replay"}
+_PROVIDER_LABELS = {
+    "opencode": "Cloud (OpenAI-compatible)",
+    "local": "Local (Ollama)",
+    "replay": "Replay",
+}
 _SCENARIO_LABELS = {"normal": "Normal", "prompt_injection": "Prompt Injection", "adaptive": "Adaptive Attack"}
 
 

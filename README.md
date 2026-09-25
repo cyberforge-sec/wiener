@@ -40,7 +40,9 @@ release/      Release notes
 
 ## 5. Requirements
 
-- Python 3.10+ (enforced by the health check), `pip`, and `requirements.txt`.
+- Python 3.12 is the verified release environment; Python 3.10+ is the
+  application minimum enforced by the health check. Use Docker when a matching
+  Python environment is unavailable.
 - Docker Engine for Docker use only.
 - Ollama for local inference only; the example model is `qwen2.5:1.5b`.
 - Network for cloud inference only. Replay works offline.

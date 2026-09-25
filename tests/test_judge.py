@@ -572,12 +572,13 @@ def test_api_cloud_and_local_failure_serve_prerecorded_replay(monkeypatch):
     _reset_session()
 
     tmp = Path(tempfile.mkdtemp())
+    copied = 0
     for path in Path(RECORDED_DIR).glob("*.json"):
         doc = json.loads(path.read_text())
         if (dict(doc.get("meta") or {})).get("scenario") == "judge-normal":
             shutil.copy(path, tmp / path.name)
-            break
-    else:
+            copied += 1
+    if not copied:
         raise AssertionError("judge-normal recording missing — run `python3 -m app.replay.prime`")
 
     def build(name, *, strict_replay=False):

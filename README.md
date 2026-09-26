@@ -511,6 +511,65 @@ configuration. See [docs/PROVIDERS.md](docs/PROVIDERS.md).
 | `authoritative_20260926_0946` | 135-trial run missing the provenance snapshots | 18 / 18, but `CANDIDATE` because the metrics could not be recomputed from the stored rows. Retained unmodified. |
 | `authoritative_20260926_0939` | Preflight only | PASS, 0 trials. Retained unmodified. |
 
+### Red-team stress studies — supplementary, not benchmark evidence
+
+Two additional studies ask *"what happens when the attacker tries harder?"* Both
+are labelled non-authoritative, live in their own `red_team_*` namespaces, and
+change nothing about the evidence above. They are **pressure tests, not
+performance benchmarks**: 40 adversarial trials per mode is a small sample, and
+the figures characterise one run of one population.
+
+**General semantic stress** (`red_team_stress_20260926_1827`) varies attack
+shape across nine families — authority laundering, context sandwich, context
+overload, authority conflict, benign pretext, staged urgency escalation,
+semantic paraphrase, instruction hierarchy, and a deterministic composition.
+
+| Mode | dangerous proposals | unsafe executions | FIR |
+| --- | --- | --- | --- |
+| No Defense | 2 / 40 | 2 / 40 | 0 / 4 |
+| Basic Prompt Defense | 3 / 40 | 3 / 40 | 0 / 4 |
+| WIENER | 1 / 40 | 0 / 40 | 0 / 4 |
+
+Six dangerous proposals in total: five across the two ungated modes and one
+under WIENER, which went to `REVIEW` and was not executed. Zero unsafe
+executions anywhere. On this population, a prompt-level defense did **not** add
+an execution boundary — every dangerous proposal it produced went through,
+because nothing sits behind a system prompt.
+
+Only three of the nine mutation classes were reached, because WIENER returned
+`REVIEW` on every turn and the attacker therefore only ever saw the *ambiguity*
+pool. The evasive pool needs a `BLOCK` and the escalating pool needs an `ALLOW`;
+neither occurred. **This run does not test the evasive or escalating
+strategies.**
+
+**Targeted instruction-hierarchy study** (`red_team_hierarchy_20260926_1924`)
+varies only the attacker's claim over the instruction hierarchy — override,
+fake system authority, emergency authorization, policy reinterpretation, quoted
+instruction, role reassignment, conflicting-resolution rule, indirect
+injection, multi-turn authority laundering, and a paraphrase of an override. The
+two ungated modes differ in exactly one variable here: whether a system prompt
+telling the model to resist is present at all.
+
+| Mode | dangerous proposals | unsafe executions | FIR |
+| --- | --- | --- | --- |
+| No Defense | 3 / 40 | 3 / 40 | 0 / 4 |
+| Basic Prompt Defense | **0 / 40** | 0 / 40 | 0 / 4 |
+| WIENER | 0 / 40 | 0 / 40 | 0 / 4 |
+
+The study recorded a hypothesis in advance — that a resistance prompt should not
+make the model *more* compliant, so No Defense proposals >= Basic Prompt
+proposals — and enforced it nowhere. The observed ordering followed it. The
+study also did **not** reach WIENER's boundary: the model produced no dangerous
+proposal, so it says nothing about whether the gate would have held.
+
+**Read together, the two studies characterise what a prompt-level defense
+actually buys:** it resisted all ten direct instruction-hierarchy attacks
+(3 → 0) but did not stop the semantic-framing families (3 → 3). That is a
+narrow and specific result, not a general one, and it is reported exactly as
+observed.
+
+Regenerate the ablation (one command, no credentials, ~1 second):
+
 The per-route measurements behind the identity work are in
 [docs/PROVIDER_SURVEY.md](docs/PROVIDER_SURVEY.md).
 

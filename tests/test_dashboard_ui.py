@@ -198,14 +198,34 @@ def test_selected_trial_overrides_the_default_view():
 # --- 10. model identity comes from the bundle, not the configuration ----
 
 
-def test_model_identity_is_read_from_the_recorded_rows():
+def test_model_identity_reflects_whatever_the_rows_actually_recorded():
+    """Three states are legitimate, and the page must be honest in each.
+
+    A fresh clone resolves a historical bundle whose rows either recorded no
+    identity or disagreed about it — which is precisely why that bundle failed
+    I-13b. The page may not quietly pick a model in that case.
+    """
     page, b = _page()
     identity = b.model_identity
-    assert identity and identity["agreed"], "the bundle's rows must agree on a model"
+
+    if not identity:
+        assert 'data-model-identity="unrecorded"' in page
+        assert "no model identity recorded" in page
+        # Crucially: no fabricated model label.
+        assert "data-inference-label" not in page
+        return
+
+    if not identity["agreed"]:
+        assert 'data-model-identity="unrecorded"' in page
+        assert "conflicting identities recorded" in page
+        assert "data-inference-label" not in page
+        return
+
     assert identity["rows"] == b.n_trials
     assert f'data-requested-model="{identity["requested_model"]}"' in page
     assert f'data-identity-verification="{identity["identity_verification"]}"' in page
     assert f'data-model-pinned="{identity["model_identity_pinned"]}"' in page
+    assert 'data-inference-label="' in page
 
 
 def test_transport_name_is_not_the_headline_identity():

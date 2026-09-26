@@ -175,17 +175,23 @@ Build once, then choose exactly one runtime mode:
 
 ```bash
 docker build -t wiener:local .
-docker run --rm -p 8000:8000 -e WIENER_LLM_FORCE=replay wiener:local
+docker run --rm -p 8000:8000 -e WIENER_API_HOST=0.0.0.0 -e WIENER_LLM_FORCE=replay wiener:local
 ```
+
+`WIENER_API_HOST=0.0.0.0` is required for `-p` to work: the server binds
+`127.0.0.1` by default, and a container's loopback is not the same interface
+Docker publishes. Without it the container starts, its own health check passes,
+and the host still gets connection refused.
 
 The command above is the safest setup smoke test. It is not the required live
 competition evaluation. Visit `http://localhost:8000/judge` or call `/health` in
-another terminal. If port 8000 is busy, use `-p 8001:8000`.
+another terminal. If port 8000 is busy, use `-p 8001:8000`. The app has no
+authentication, so publish it only on a trusted network.
 
 For a named background container with an inspectable health status:
 
 ```bash
-docker run -d --name wiener-demo -p 8000:8000 -e WIENER_LLM_FORCE=replay wiener:local
+docker run -d --name wiener-demo -p 8000:8000 -e WIENER_API_HOST=0.0.0.0 -e WIENER_LLM_FORCE=replay wiener:local
 docker inspect --format '{{.State.Health.Status}}' wiener-demo
 docker logs -f wiener-demo
 docker stop wiener-demo
@@ -196,7 +202,7 @@ For cloud mode, put the evaluator's real credentials in `.env` and explicitly
 select the cloud adapter:
 
 ```bash
-docker run --rm -p 8000:8000 --env-file .env -e WIENER_LLM_FORCE=openai_compatible wiener:local
+docker run --rm -p 8000:8000 -e WIENER_API_HOST=0.0.0.0 --env-file .env -e WIENER_LLM_FORCE=openai_compatible wiener:local
 ```
 
 For local Ollama in Docker, use the host gateway command in section 10. If a
@@ -413,6 +419,7 @@ behaviour, and the evidence/validation layer.
 | Problem | Cause | Fix |
 | --- | --- | --- |
 | `docker: command not found` | Docker is unavailable on `PATH`. | Install/start Docker Engine. |
+| Container runs but host gets connection refused | The server bound the container's `127.0.0.1`, which `-p` cannot reach. | Add `-e WIENER_API_HOST=0.0.0.0` to `docker run`. |
 | Port 8000 is in use | Another process owns the host port. | Stop it or use `-p 8001:8000`. |
 | Ollama unavailable | Service stopped or bad host. | Run `ollama serve`, verify `/api/tags`, set `WIENER_LOCAL_HOST`. |
 | Model not found | Configured tag was not pulled. | Run `ollama pull <model>`. |

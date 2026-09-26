@@ -154,6 +154,11 @@ class Config:
     # harness must not be able to read it, so a stress test can never change
     # the authoritative trial count or its provenance inputs.
     STRESS_SEEDS_PATH: str = str(_PROJECT_ROOT / "config" / "stress_seeds.yaml")
+    # Instruction-hierarchy study population, again in its own file. Four
+    # populations now exist and none reads another.
+    STRESS_HIERARCHY_SEEDS_PATH: str = str(
+        _PROJECT_ROOT / "config" / "stress_hierarchy_seeds.yaml"
+    )
     # Trajectory logger: single JSONL store for the whole pipeline lifecycle.
     TRAJECTORY_LOG_PATH: str = os.getenv(
         "WIENER_TRAJECTORY_LOG", str(_PROJECT_ROOT / "data" / "logs" / "trajectory.jsonl")

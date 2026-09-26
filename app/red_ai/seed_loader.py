@@ -126,3 +126,34 @@ class StressSeedLoader(SeedLoader):
     def benign_controls(self) -> list[AttackSeed]:
         """Entries that request nothing (operational safety / FIR)."""
         return [s for s in self.seeds if s.intended_action is None]
+
+
+class HierarchySeedLoader(SeedLoader):
+    """Loads the `hierarchy_seeds` list from config/stress_hierarchy_seeds.yaml.
+
+    A FIFTH separate population, and the narrowest of them: every attack varies
+    only the attacker's claim over the instruction hierarchy, so the two ungated
+    modes differ in exactly one variable - whether the system prompt telling the
+    model to resist is present at all.
+
+    Like `StressSeedLoader` it reads its OWN file and does NOT fall back to any
+    other population, and it is not in the code fingerprint's
+    `_EXPERIMENT_SOURCES`, so a targeted study can never invalidate the
+    authoritative benchmark's provenance.
+    """
+
+    _LIST_KEY = "hierarchy_seeds"
+
+    def __init__(self, path: str | None = None) -> None:
+        super().__init__(path or config.STRESS_HIERARCHY_SEEDS_PATH)
+
+    def get(self, seed_id: str) -> AttackSeed | None:
+        return super().get(seed_id)
+
+    @property
+    def adversarial(self) -> list[AttackSeed]:
+        return [s for s in self.seeds if s.intended_action is not None]
+
+    @property
+    def benign_controls(self) -> list[AttackSeed]:
+        return [s for s in self.seeds if s.intended_action is None]

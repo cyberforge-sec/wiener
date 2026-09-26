@@ -452,28 +452,67 @@ number look dishonest.
 
 ### Current evidence status
 
-**The repository does not currently contain a `LOCKED_VERIFIED` authoritative
-cloud benchmark.**
+**The repository contains a `LOCKED_VERIFIED` authoritative cloud benchmark:
+`authoritative_20260926_1000` — 135 trials, 18 of 18 invariants passing,
+provenance CLEAN at the time of the run, and metrics that recompute exactly
+from the stored trial rows.**
 
-The latest cloud evaluation using OpenCode / Big Pickle produced a 135-trial
-`CANDIDATE` bundle (17 of 18 invariants) because the gateway did not provide a
-pinned, independently verifiable model identity for the route serving the
-benchmark payload. It is preserved as supplementary evidence and is not
-presented as verified.
+| Mode | Unsafe executions | UAR | ASR |
+| --- | --- | --- | --- |
+| No Defense | 5 / 45 | 11.11% | 11.11% |
+| Basic Prompt Defense | 0 / 45 | 0.00% | 0.00% |
+| WIENER | 0 / 45 | 0.00% | 6.67% |
 
-A separate preflight artifact records the same identity gate blocking that route
-**before any trial was spent** — the run reached the live provider, served the
-benchmark payload and returned valid JSON on every probe, and was refused
-anyway, purely on model-identity quality.
+The three WIENER trials the attack succeeded against were all held at the gate
+— 2 `BLOCK`, 1 `REVIEW`, 0 executed. That is the whole claim in one table: the
+attack succeeds against the model, and the execution boundary does not yield.
 
-These candidate artifacts are machine-local and gitignored. They are documented
-in [docs/PROVIDER_SURVEY.md](docs/PROVIDER_SURVEY.md), which records the
-per-route measurements, and they are not counted as benchmark evidence.
+### What "locked" does and does not mean
 
-Nothing in this repository should be read as a claim that an authoritative
-cloud benchmark has been verified. What *is* verified is the enforcement
-claim, and it does not depend on which provider ran: see
-`enforcement_ablation_reference`.
+The run is locked **as of the code revision that produced it**. Two facts are
+reported separately and neither is collapsed into the other:
+
+- **Evidence status** — `LOCKED_VERIFIED`, 18 / 18, artifacts intact, metrics
+  reproducible. A property of the bundle.
+- **Current provenance** — whether this bundle still describes the *current*
+  tree. A property of the comparison, recomputed on every page load.
+
+`app/present/*` is inside the code fingerprint, so presentation and identity
+work committed after the run makes the current tree differ. The dashboard says
+so explicitly (`ARTIFACTS INTACT · RESULTS UNCHANGED · PRODUCED BY AN EARLIER
+REVISION OF THE TREE`) rather than implying the results are current. The run is
+not re-executed to make a cosmetic change look fresh.
+
+Whether the presentation layer belongs inside the experiment fingerprint is an
+open question with a real trade-off, and is deliberately not decided here.
+
+### Model identity
+
+All 135 trials record a provider-confirmed identity:
+
+```
+requested_model          = oc/big-pickle
+provider_reported_model  = big-pickle
+identity_verification    = trusted_route_match
+model_identity_pinned    = false
+```
+
+The gateway reported the canonical id for a configured routing namespace, and
+the remainder matched the reported id exactly. That verifies the **route
+mapping**. It does not make the model pinned: `big-pickle` is a floating alias,
+which is why the observed baseline varies between runs on the same nominal
+configuration. See [docs/PROVIDERS.md](docs/PROVIDERS.md).
+
+### Earlier attempts, retained
+
+| Bundle | What it is | Status |
+| --- | --- | --- |
+| `authoritative_20260926_0359` | 135-trial run before trusted-route verification existed | 17 / 18 — failed the model-identity invariant. Retained unmodified. |
+| `authoritative_20260926_0946` | 135-trial run missing the provenance snapshots | 18 / 18, but `CANDIDATE` because the metrics could not be recomputed from the stored rows. Retained unmodified. |
+| `authoritative_20260926_0939` | Preflight only | PASS, 0 trials. Retained unmodified. |
+
+The per-route measurements behind the identity work are in
+[docs/PROVIDER_SURVEY.md](docs/PROVIDER_SURVEY.md).
 
 Regenerate the ablation (one command, no credentials, ~1 second):
 

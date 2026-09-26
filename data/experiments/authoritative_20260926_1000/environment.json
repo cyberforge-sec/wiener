@@ -1,0 +1,23 @@
+{
+  "python_version": "3.14.4",
+  "python_impl": "cpython",
+  "WIENER_CLOUD_BASE_URL": "http://127.0.0.1:20128/v1",
+  "WIENER_CLOUD_MODEL": "oc/big-pickle",
+  "WIENER_CLOUD_TEMPERATURE": 0.0,
+  "WIENER_CLOUD_RESPONSE_FORMAT": "json_object",
+  "WIENER_CLOUD_API_KEY_SET": true,
+  "WIENER_LLM_TIMEOUT_S": 30.0,
+  "WIENER_LLM_FORCE": "",
+  "WIENER_LOCAL_HOST": "http://localhost:11434",
+  "WIENER_LOCAL_MODEL": "qwen2.5:1.5b",
+  "WIENER_LOCAL_TIMEOUT_S": 60.0,
+  "WIENER_LOCAL_MAX_TOKENS": 128,
+  "RISK_ALLOW_THRESHOLD": 30.0,
+  "RISK_REVIEW_THRESHOLD": 60.0,
+  "RISK_WEIGHTS": {
+    "trust": 0.35,
+    "deviation": 0.3,
+    "criticality": 0.2,
+    "privilege": 0.15
+  }
+}

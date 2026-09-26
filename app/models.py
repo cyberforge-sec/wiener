@@ -175,12 +175,30 @@ class AttackSeed(BaseModel):
 
 
 class MutationKind(str, Enum):
-    """Basic mutations: wording/framing/presentation/structure only."""
+    """Mutations: wording/framing/presentation/structure, plus the stress-test
+    classes that change authority, context, ordering and narrative.
+
+    The first four are the original lexical mutations and are kept unchanged so
+    the authoritative benchmark's recorded attack sequence still reproduces. The
+    stress classes are additive and are only ever selected by the stress-test
+    harness; `MUTATION_ORDER` does not include them, so no existing run can be
+    perturbed by their presence.
+    """
 
     SYNONYM_SWAP = "synonym_swap"
     FRAME_SHIFT = "frame_shift"
     STRUCTURE_REORDER = "structure_reorder"
     URGENCY_BOOST = "urgency_boost"
+    # --- red-team stress classes (semantic, not lexical) ----------------
+    AUTHORITY_LAUNDERING = "authority_laundering"
+    CONTEXT_SANDWICH = "context_sandwich"
+    INSTRUCTION_HIERARCHY_ATTACK = "instruction_hierarchy_attack"
+    AUTHORITY_CONFLICT = "authority_conflict"
+    BENIGN_PRETEXT = "benign_pretext"
+    URGENCY_ESCALATION = "urgency_escalation"
+    CONTEXT_OVERLOAD = "context_overload"
+    SEMANTIC_PARAPHRASE = "semantic_paraphrase"
+    MULTI_MUTATION_COMPOSITION = "multi_mutation_composition"
 
 
 class MutationMeta(BaseModel):

@@ -85,3 +85,44 @@ class AdaptiveSeedLoader(SeedLoader):
 
     def get(self, seed_id: str) -> AttackSeed | None:
         return super().get(seed_id) or SeedLoader().get(seed_id)
+
+class StressSeedLoader(SeedLoader):
+    """Loads the `stress_seeds` list from config/stress_seeds.yaml.
+
+    A FOURTH, entirely separate population. The benchmark reads
+    `SeedLoader().seeds` (135 trials), the interactive demo reads
+    `AdaptiveSeedLoader`, and the stress test reads this. None of them reads
+    the others, so running a stress test cannot change the benchmark's trial
+    count, its metrics, or the /dashboard ledger.
+
+    Resolved by explicit path rather than by a new key in red_ai_seeds.yaml:
+    keeping the stress population in its own FILE is what makes that separation
+    structural instead of a naming convention. It also means the stress
+    population is not in `code_fingerprint`'s `_EXPERIMENT_SOURCES`, which is
+    correct - a stress test must never be able to invalidate the provenance of
+    the authoritative benchmark.
+    """
+
+    _LIST_KEY = "stress_seeds"
+
+    def __init__(self, path: str | None = None) -> None:
+        super().__init__(path or config.STRESS_SEEDS_PATH)
+
+    def get(self, seed_id: str) -> AttackSeed | None:
+        """Resolve only inside this population.
+
+        Deliberately does NOT fall back to `SeedLoader`: a stress test that
+        silently borrowed a benchmark seed would compare two different
+        populations and report it as one.
+        """
+        return super().get(seed_id)
+
+    @property
+    def adversarial(self) -> list[AttackSeed]:
+        """Entries that ask for a specific action (attack effectiveness)."""
+        return [s for s in self.seeds if s.intended_action is not None]
+
+    @property
+    def benign_controls(self) -> list[AttackSeed]:
+        """Entries that request nothing (operational safety / FIR)."""
+        return [s for s in self.seeds if s.intended_action is None]

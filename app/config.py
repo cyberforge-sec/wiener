@@ -150,6 +150,10 @@ class Config:
     ACTION_METADATA_PATH: str = str(_PROJECT_ROOT / "config" / "action_metadata.yaml")
     SAFETY_CONSTRAINTS_PATH: str = str(_PROJECT_ROOT / "config" / "safety_constraints.yaml")
     RED_AI_SEEDS_PATH: str = str(_PROJECT_ROOT / "config" / "red_ai_seeds.yaml")
+    # Red-team STRESS population, in its own file on purpose: the benchmark
+    # harness must not be able to read it, so a stress test can never change
+    # the authoritative trial count or its provenance inputs.
+    STRESS_SEEDS_PATH: str = str(_PROJECT_ROOT / "config" / "stress_seeds.yaml")
     # Trajectory logger: single JSONL store for the whole pipeline lifecycle.
     TRAJECTORY_LOG_PATH: str = os.getenv(
         "WIENER_TRAJECTORY_LOG", str(_PROJECT_ROOT / "data" / "logs" / "trajectory.jsonl")

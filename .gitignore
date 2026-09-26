@@ -48,6 +48,31 @@ data/experiments/authoritative_20260925_zero_degraded/*
 !data/experiments/authoritative_20260925_zero_degraded/experiment_config.json
 !data/experiments/authoritative_20260925_zero_degraded/seed_manifest.json
 
+# The current authoritative bundle. A judge who clones the repository must be
+# able to open /dashboard and see the LATEST verified run, not only the older
+# ones, so the same seven files the manifest hashes are committed. The three
+# provenance snapshots are included as well: they were written BEFORE the first
+# trial, so they are the record of how the run was configured, and they did not
+# exist when the bundles above were produced.
+#   python -m scripts.experiments.main plan      authoritative_20260926_1000
+#   python -m scripts.experiments.main preflight authoritative_20260926_1000
+#   python -m scripts.experiments.main run       authoritative_20260926_1000
+!data/experiments/authoritative_20260926_1000/
+data/experiments/authoritative_20260926_1000/*
+!data/experiments/authoritative_20260926_1000/metrics.json
+!data/experiments/authoritative_20260926_1000/validation.json
+!data/experiments/authoritative_20260926_1000/trials.jsonl
+!data/experiments/authoritative_20260926_1000/evidence_manifest.json
+!data/experiments/authoritative_20260926_1000/code_fingerprint.json
+!data/experiments/authoritative_20260926_1000/experiment_config.json
+!data/experiments/authoritative_20260926_1000/seed_manifest.json
+!data/experiments/authoritative_20260926_1000/environment.json
+!data/experiments/authoritative_20260926_1000/prompt_manifest.json
+!data/experiments/authoritative_20260926_1000/repo_manifest.json
+!data/experiments/authoritative_20260926_1000/preflight.json
+!data/experiments/authoritative_20260926_1000/run_summary.json
+!data/experiments/authoritative_20260926_1000/trajectory.jsonl
+
 # Enforcement ablation: deterministic and offline, so the reference copy is
 # committed for judges. Regenerate with:
 #   python -m scripts.experiments.enforcement_ablation enforcement_ablation_reference

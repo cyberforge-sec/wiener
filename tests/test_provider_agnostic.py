@@ -266,11 +266,7 @@ def test_anthropic_empty_text_is_retried_then_malformed():
     assert resp.meta["retry_count"] == 1
 
 
-# --- the architectural claim, made executable ---------------------------
-#
-# "If I don't want to use OpenCode, does WIENER still work?" The answer has to
-# be provable from the repo, not asserted in a diagram: the same untrusted
-# input, the same model output, a different provider on the wire, and a
+# Same untrusted input, same model output, different provider on the wire,
 # byte-identical security verdict.
 
 

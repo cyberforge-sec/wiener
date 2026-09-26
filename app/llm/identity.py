@@ -47,8 +47,8 @@ TRANSPORT_NAMES = frozenset(
 #   - an explicit -vN:                qwen-v2
 #   - an immutable content hash:      some-model@a1b2c3d
 #
-# Note that digits alone are NOT enough: `gpt-4o-mini` contains a digit but is
-# a rolling alias, because the version is not at the end.
+# A digit alone does not make an id pinned: `gpt-4o-mini` is a rolling alias
+# because its version is not at the end.
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _TRAILING_VERSION = re.compile(r"-\d+$")
 _EXPLICIT_VERSION = re.compile(r"-v\d+", re.IGNORECASE)

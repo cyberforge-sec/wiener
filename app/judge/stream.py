@@ -211,16 +211,13 @@ class LiveRunStore:
     def iter_run(self, run: _LiveRun) -> Iterator[dict]:
         """Walk one run's stream via its queue; refcounted so the entry is only
         dropped once ALL consumers have detached (broadcast, not single-reader)."""
-        # Bounded: a consumer that stops reading can never grow server memory
-        # without limit. A full queue drops intermediate events (the client
-        # catches up from the authoritative run.log on the next reconnect) and
-        # the terminal event is always delivered.
+        # Bounded queue: a consumer that stops reading cannot grow server
+        # memory. A full queue drops intermediate events; the terminal event is
+        # always delivered.
         own = queue.Queue(maxsize=_CONSUMER_QUEUE_MAXSIZE)
         with run.lock:
-            # Replay the history first (reconnect-safe). If the run produced
-            # more events than one consumer may buffer, keep the most recent
-            # window: a late/reconnecting client cares about current state, and
-            # the full log stays in ``run.log`` for audit.
+            # Reconnect-safe: keep the most recent window, since a late client
+            # wants current state. The full log stays in ``run.log``.
             history = run.log[-_CONSUMER_QUEUE_MAXSIZE:]
             for event in history:
                 own.put_nowait(event)

@@ -230,11 +230,8 @@ class OpenAICompatibleProvider:
                         deterministic_requested=self._temperature == 0,
                         endpoint="chat/completions",
                         declared_model=self._expected_model,
-                        # Namespaces this gateway is trusted to strip, from
-                        # configuration only. This is what lets a routing
-                        # rewrite such as `oc/big-pickle` -> `big-pickle` be
-                        # verified; without a configured entry the same
-                        # rewrite stays unverified.
+                        # Configuration is the only source; see
+                        # config.CLOUD_MODEL_ROUTE_PREFIXES.
                         trusted_route_prefixes=self._route_prefixes,
                     )
                     return LLMResponse(

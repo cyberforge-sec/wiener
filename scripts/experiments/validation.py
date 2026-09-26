@@ -204,13 +204,15 @@ def run_validation(records: list[TrialRecord], experiment_id: str) -> dict:
         v13["detail"] += f" ({unchecked} trial(s) produced no action to check)"
         _add_skipped(v13, f"{unchecked} trial(s) produced no action to check")
 
-    # I-13b Model identity: the recorded model must be a verifiable model id,
-    # not a transport name and not a rewritten alias. Provider adapters report
-    # their own transport name, which is not evidence of which model answered.
+    # I-13b Model identity: the recorded model must be a model id the provider
+    # confirmed, not a transport name and not an unexplained rewrite. A rewrite
+    # is acceptable only in the forms the provider layer recognizes, and the
+    # recognition is recorded rather than assumed.
     v13b = _invariant("I-13b", "model-identity-recorded", "")
-    # Kept in step with app.llm.identity.TRANSPORT_NAMES so the evidence layer
-    # and the provider layer agree on what counts as a transport name.
-    from app.llm.identity import TRANSPORT_NAMES
+    # Kept in step with app.llm.identity so the evidence layer and the provider
+    # layer agree on what counts as a transport name and on which kinds of
+    # verification exist.
+    from app.llm.identity import TRANSPORT_NAMES, UNVERIFIED
 
     transport_names = set(TRANSPORT_NAMES)
     wrong_model = 0
@@ -228,21 +230,24 @@ def run_validation(records: list[TrialRecord], experiment_id: str) -> dict:
                 f"trial {r.trial_id} {r.mode}: model={r.model!r} is a transport name, not a model id",
             )
             continue
-        # A provider that answers with a DIFFERENT id than we requested is
-        # rewriting ids, so neither value identifies the backing model. That is
-        # recorded rather than locked: an unverifiable model identity must
-        # fail the evidence, not ship with a caveat.
         meta = r.provider_meta or {}
-        if meta.get("model_identity_reliable") is False:
+        # The provider layer already decided this: a trusted route match sets
+        # reliable=True, and anything it could not verify leaves it False. I-13b
+        # holds that line rather than re-deriving it, so a row can only pass by
+        # having been verified upstream.
+        reliable = meta.get("model_identity_reliable")
+        kind = meta.get("identity_verification")
+        if reliable is False or kind == UNVERIFIED:
             unverifiable += 1
             _add_violation(
                 v13b,
                 f"trial {r.trial_id} {r.mode}: model identity unverifiable "
                 f"(requested={meta.get('requested_model')!r}, "
-                f"reported={meta.get('provider_reported_model')!r}); "
+                f"reported={meta.get('provider_reported_model')!r}, "
+                f"verification={kind!r}); "
                 f"reason: {meta.get('model_identity_note')}",
             )
-    v13b["detail"] = "every live trial records a verifiable model id its provider confirmed"
+    v13b["detail"] = "every live trial records a provider-confirmed model identity"
     if wrong_model:
         v13b["detail"] += f" ({wrong_model} recorded a transport name instead)"
     if unverifiable:

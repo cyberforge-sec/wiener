@@ -617,3 +617,72 @@ def test_identity_is_a_hard_gate_in_the_summary():
     assert build(False, False) == "BLOCKED"
     # Identity unverifiable but explicitly overridden -> identity does not block.
     assert build(False, True) == "PASS"
+
+
+def _identity_record(reported, reliable, kind, requested="oc/big-pickle", model=None):
+    """A trial whose provider reported `reported` for `requested`."""
+    return _record(
+        model=model or requested,
+        provider_meta={
+            "temperature": 0.0,
+            "model": model or requested,
+            "provider": "opencode",
+            "adapter": "openai_compatible",
+            "requested_model": requested,
+            "provider_reported_model": reported,
+            "model_identity_reliable": reliable,
+            "identity_verification": kind,
+        },
+    )
+
+
+def test_trusted_route_match_passes_i13b():
+    """A configured routing namespace makes the rewrite verifiable, so I-13b
+    passes. The recorded kind is what an earlier unverifiable rewrite lacked."""
+    from scripts.experiments.validation import run_validation
+
+    res = run_validation(
+        [_identity_record("big-pickle", True, "trusted_route_match")], "e"
+    )
+    assert "I-13b" not in res["failing_invariants"]
+
+
+def test_exact_and_declared_pinned_matches_pass_i13b():
+    from scripts.experiments.validation import run_validation
+
+    for kind, reported, requested in (
+        ("exact_match", "gpt-4o-mini-2024-07-18", "gpt-4o-mini-2024-07-18"),
+        ("declared_pinned_match", "gpt-4o-mini-2024-07-18", "oc/x"),
+    ):
+        rec = _identity_record(reported, True, kind, requested=requested)
+        res = run_validation([rec], "e")
+        assert "I-13b" not in res["failing_invariants"], kind
+
+
+def test_i13b_still_fails_for_arbitrary_mismatch():
+    from scripts.experiments.validation import run_validation
+
+    res = run_validation(
+        [_identity_record("some-other-model", False, "unverified")], "e"
+    )
+    assert res["validation_status"] == "FAIL"
+    assert "I-13b" in res["failing_invariants"]
+
+
+def test_i13b_cannot_pass_by_claiming_reliability_with_unverified_kind():
+    """Defensive: contradictory metadata must not be accepted as verified."""
+    from scripts.experiments.validation import run_validation
+
+    res = run_validation([_identity_record("big-pickle", True, "unverified")], "e")
+    assert "I-13b" in res["failing_invariants"]
+
+
+def test_i13b_detail_does_not_claim_pinning():
+    from scripts.experiments.validation import run_validation
+
+    res = run_validation(
+        [_identity_record("big-pickle", True, "trusted_route_match")], "e"
+    )
+    detail = res["invariants"]["I-13b"]["detail"]
+    assert "provider-confirmed model identity" in detail
+    assert "pinned" not in detail

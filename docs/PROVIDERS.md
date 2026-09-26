@@ -57,20 +57,89 @@ collapse them.
 **fails the evidence lock** — when:
 
 1. the provider reported nothing;
-2. what it reported is a transport name, not a model id; or
-3. the provider reported a *different* id than requested, meaning it rewrites
-   ids and neither value identifies the backing model.
+2. what it reported is a transport name, not a model id;
+3. the provider reported a *different* id than requested and no configured
+   routing namespace explains it; or
+4. the only id offered in its place is a floating alias.
 
-Case 3 is not hypothetical. The development gateway was observed answering
+`identity_verification` names which of the accepted forms applied, so a reader
+never has to infer it:
+
+| `identity_verification` | Meaning | `model_identity_reliable` |
+| --- | --- | --- |
+| `exact_match` | the provider echoed the requested id | `true` |
+| `trusted_route_match` | a configured namespace was stripped and the remainder equals the reported id exactly | `true` |
+| `declared_pinned_match` | the reported id matched a declared expectation AND is a pinned id | `true` |
+| `unverified` | none of the above | `false` |
+
+### Trusted routing prefixes
+
+Some gateways route by namespace and report the canonical model id with the
+prefix stripped. `WIENER_CLOUD_MODEL_ROUTE_PREFIXES` names the namespaces you
+trust that gateway to strip:
+
+```
+WIENER_CLOUD_MODEL_ROUTE_PREFIXES=oc/
+```
+
+The trusted route prefix allows a gateway to report the canonical model name
+after stripping a configured routing namespace. It verifies the reported route
+mapping only; it does not establish that the backing model is pinned or
+immutable.
+
+A rewrite is accepted only when the prefix accounts for the reported id
+**exactly**: the requested id must start with the prefix and the remainder must
+equal the reported id character for character. Nothing is inferred from the
+presence of a slash, from the provider or adapter name, or from either model
+string — only an explicitly configured prefix authorizes anything.
+
+| requested | reported | prefixes | result |
+| --- | --- | --- | --- |
+| `oc/big-pickle` | `big-pickle` | `oc/` | `trusted_route_match` |
+| `oc/gpt-4o-mini-2024-07-18` | `gpt-4o-mini-2024-07-18` | `oc/` | `trusted_route_match` |
+| `oc/big-pickle` | `big-pickle` | *(none)* | `unverified` |
+| `oc/big-pickle` | `big-pickle-v2` | `oc/` | `unverified` |
+| `oc/big-pickle` | `some-other-model` | `oc/` | `unverified` |
+| `wrong/big-pickle` | `big-pickle` | `oc/` | `unverified` |
+| `oc/big-pickle` | `openai_compatible` | `oc/` | `unverified` |
+
+Because the reported id is still recorded, the recorded evidence for a route
+that strips `oc/` looks like this:
+
+```
+requested_model          = oc/big-pickle
+provider_reported_model  = big-pickle
+identity_verification    = trusted_route_match
+model_identity_pinned    = false
+```
+
+`model_identity_pinned` stays `false` deliberately. `big-pickle` is a floating
+alias: it names whatever the gateway currently points it at, so it can change
+without the artifact changing. `trusted_route_match` therefore confirms the
+**route mapping** — that the gateway reported the canonical id corresponding to
+the configured namespace — and nothing about immutability. `is_pinned_model_id`
+is unchanged by any of this, and a declaration still cannot promote a floating
+alias into a verifiable identity.
+
+If the id is a pinned one, both facts are recorded independently and both are
+true:
+
+```
+requested_model          = oc/gpt-4o-mini-2024-07-18
+provider_reported_model  = gpt-4o-mini-2024-07-18
+identity_verification    = trusted_route_match
+model_identity_pinned    = true
+```
+
+Case 3 above is not hypothetical. The development gateway was observed answering
 a request for `oc/big-pickle` with `"model": "big-pickle"`, while advertising
-111 models of which none completed a request. To be precise about what that
-does and does not show: **the request identifies the served model as
-`big-pickle`, and OpenCode publicly lists `big-pickle` as an OpenCode Zen
-model. The gateway provides no independent evidence of the backing model
-behind that route.** That is a statement about identifiability, not an
-accusation that the model is anything other than what the provider
-advertises — and it is why the run is blocked from locking rather than
-silently accepted.
+111 models of which none completed a request. With `oc/` configured as a trusted
+namespace that response is a verified route match; without it, the run is
+blocked from locking. Either way the honest statement is the same: **the
+request identifies the served model as `big-pickle`, and the gateway provides
+no independent evidence of the backing model behind that route.** That is a
+statement about identifiability, not an accusation that the model is anything
+other than what the provider advertises.
 
 ## Registering the adapter
 

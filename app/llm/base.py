@@ -50,6 +50,17 @@ class LLMProvider(Protocol):
 
     name: str
 
+    @property
+    def model(self) -> str | None:
+        """The model id this provider is configured to request, if any.
+
+        Presentation metadata only. The security layer never reads this, and
+        it is the REQUESTED id, not a provider-reported one: reporting quality
+        is decided by the identity preflight, not asserted by an accessor.
+        `None` means the tier has no live model (deterministic replay).
+        """
+        ...
+
     def complete(self, system: str, user: str) -> LLMResponse:
         """Return a normalized completion given a system and user prompt.
 

@@ -37,6 +37,11 @@ class ReplayProvider:
 
     name = "replay"
 
+    @property
+    def model(self) -> str | None:
+        """No live model: this tier replays recorded responses deterministically."""
+        return None
+
     def __init__(self, replay_dir: str | None = None, *, strict: bool = False) -> None:
         self._replay_dir = Path(replay_dir) if replay_dir else RECORDED_DIR
         self._replay_dir.mkdir(parents=True, exist_ok=True)

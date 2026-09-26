@@ -389,10 +389,17 @@ def test_state_is_empty_after_reset():
 
 def test_restore_status_line_has_no_escaped_separator_leakage():
     """Regression: the restored-run status line rendered a literal `00b7`
-    because the separator was double-escaped in the Python source."""
+    because the separator was double-escaped in the Python source.
+
+    The line identifies the model that served the run, not the adapter, so the
+    separator guard is asserted against the current label text.
+    """
     page = render_page()
     line_start = page.index("Showing the last completed run")
     line = page[line_start : line_start + 260]
     assert "\\u00b7" not in line
     assert "00b7" not in line
-    assert "\u00b7 Provider: " in line
+    assert "\u00b7 Model: " in line
+    # "restored, not re-executed" is load-bearing: it tells the judge the
+    # result on screen is the stored one, not a fresh execution.
+    assert "restored, not re-executed" in line

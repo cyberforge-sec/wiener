@@ -82,7 +82,7 @@ tests/        Pytest suite
 benchmarks/   Optional local benchmark harness
 scripts/      Health check and experiment utilities
 docs/         Architecture, setup, runbook, contracts, benchmark notes
-data/         Recorded replay fixtures and curated dashboard evidence
+data/         Recorded replay fixtures and locked authoritative evidence
 release/      Release notes
 ```
 
@@ -358,7 +358,6 @@ policy verdict, and simulated-tool result.
 | --- | --- | --- |
 | `/health` | GET | Runtime status and resolved provider |
 | `/analyze` | POST | Pipeline run for a `SOCContext` JSON body |
-| `/dashboard` | GET | Read-only dashboard (`?format=json`) |
 | `/judge` | GET | Interactive Judge Mode |
 | `/judge/logo` | GET | Judge logo asset |
 | `/judge/run` | POST | Run scenario; `?stream=true` starts SSE |
@@ -388,15 +387,14 @@ The health check reports unavailable cloud/Ollama as warnings because replay is 
 
 The suite runs fully offline (replay/fake providers) and needs no credentials.
 It covers the authorization boundary, provider contracts, retry and provenance
-behaviour, the evidence/validation layer, and the presentation layer.
+behaviour, and the evidence/validation layer.
 
 | Area | What is asserted |
 | --- | --- |
 | `test_policy_gate.py`, `test_tool_executor.py` | A non-`ALLOW` decision can never reach a simulated tool; the executor re-checks the decision itself; every action in the vocabulary has a simulated tool. |
-| `test_metrics.py`, `test_dashboard.py` | UAR/ASR/FIR/UAPR are computed only from stored trial fields; malformed input raises instead of returning a plausible number. |
+| `test_metrics.py` | UAR/ASR/FIR/UAPR are computed only from stored trial fields; malformed input raises instead of returning a plausible number. |
 | `test_provider_contract.py` | Cloud and local providers report the model id and requested temperature; the local rung uses real system/user roles when the server supports it and says so when it does not. |
 | `test_provenance.py` | A transport name in the `model` field, an unrecorded temperature, a missing duration, and an absolute clock value leaking into a latency delta are all failures. |
-| `test_present.py` | The dashboard renders stored values rather than literals, and corrupt evidence fails closed. |
 | `test_enforcement_ablation.py` | The ablation is deterministic, keeps its own artifacts, and cannot touch the authoritative evidence. |
 
 ## 15. Verification
@@ -404,7 +402,7 @@ behaviour, the evidence/validation layer, and the presentation layer.
 - [ ] Application starts and `/health` returns `ok`.
 - [ ] Replay scenarios are deterministic (setup smoke test only).
 - [ ] The required live provider is selected and `/health` reports it.
-- [ ] The dashboard discloses the recorded evidence source-provenance status.
+- [ ] `/judge` serves and the removed `/dashboard` route returns 404.
 - [ ] Cloud uses evaluator-provided configuration.
 - [ ] Local mode reaches evaluator-provided Ollama.
 - [ ] The safety boundary remains simulated.
@@ -432,11 +430,11 @@ The server binds `127.0.0.1` by default and has **no authentication**. Anyone wh
 
 ## 18. Project Status
 
-Implemented: FastAPI API, Judge Mode, cloud/local/replay providers, Red AI loop, SOC/Blue/Risk/Policy pipeline, deterministic replay, tests, and simulated tools. Cloud and Ollama are the live-evaluation integrations; replay is offline setup verification. All tool execution and dashboard evidence are simulated/PoC artifacts. WIENER is not production-ready.
+Implemented: FastAPI API, Judge Mode, cloud/local/replay providers, Red AI loop, SOC/Blue/Risk/Policy pipeline, deterministic replay, tests, and simulated tools. Cloud and Ollama are the live-evaluation integrations; replay is offline setup verification. All tool execution is simulated and the shipped evidence is a recorded PoC artifact. WIENER is not production-ready.
 
 See [architecture](docs/architecture.md), [provider adapters](docs/PROVIDERS.md), [cloud route survey](docs/PROVIDER_SURVEY.md), [setup notes](docs/competition_setup.md), [demo runbook](docs/DEMO_RUNBOOK.md), [contracts](docs/contracts.md), and [benchmark notes](docs/BENCHMARK.md).
 
-## 19. Evidence and Experiments
+## 19. Evidence and Benchmark Results
 
 The repository tracks three reference experiment sets in `data/experiments/`.
 Local development may additionally contain gitignored candidate and preflight
@@ -444,47 +442,68 @@ artifacts, documented in [the route survey](docs/PROVIDER_SURVEY.md). These are
 not interchangeable, and confusing them is the fastest way to make an honest
 number look dishonest.
 
-| Directory | What it is | Status |
-| --- | --- | --- |
-| `authoritative_20260925_zero_degraded` | The 135-trial benchmark: 45 trials x 3 modes, live provider, locked artifacts. The source of the dashboard headline numbers. | Historical. Its `model` field records a transport name on 90 of 135 rows and no trial recorded its decoding temperature, so it does **not** satisfy the current validation checklist. Kept unmodified. |
-| `authoritative_20260912_clean_2252` | The earlier 10-trial run. | Historical only. Its anomaly was not reproduced. |
-| `enforcement_ablation_reference` | A separate experiment answering "is safety from the prompt or from the gate?" | Current, deterministic, offline. |
+### Headline result
 
-### Current evidence status
+**Unsafe Action Rate (UAR)** — the share of adversarial trials that ended in an
+unsafe *execution* rather than a held or refused decision:
 
-**The repository contains a `LOCKED_VERIFIED` authoritative cloud benchmark:
-`authoritative_20260926_1000` — 135 trials, 18 of 18 invariants passing,
-provenance CLEAN at the time of the run, and metrics that recompute exactly
-from the stored trial rows.**
+| Mode | Unsafe executions | UAR | ASR |
+| --- | --- | --- | --- |
+| No Defense | 12 / 45 | 26.67% | 26.67% |
+| Basic Prompt Defense | 7 / 45 | 15.56% | 15.56% |
+| **WIENER** | **0 / 45** | **0.00%** | 22.22% |
+
+Source: `authoritative_20260912_clean_2252` — 135 trials (45 x 3 modes), live
+provider, `LOCKED_VERIFIED`, validation PASS 16 / 16, and metrics that recompute
+exactly from the stored trial rows. These are the official authoritative figures
+for this submission; they are reproduced here, not recomputed.
+
+The interesting part is the WIENER row. ASR 22.22% means the attack still
+elicited a response the model considered compliant — the model was successfully
+persuaded. UAR 0.00% means none of it reached a tool. Proposal and authority are
+separated, and the separation held on every trial.
+
+### A later, stricter run
+
+`authoritative_20260926_1000` repeats the same 135-trial design against a
+hardened provider-identity check, and passes the strengthened 18 / 18 checklist:
 
 | Mode | Unsafe executions | UAR | ASR |
 | --- | --- | --- | --- |
 | No Defense | 5 / 45 | 11.11% | 11.11% |
 | Basic Prompt Defense | 0 / 45 | 0.00% | 0.00% |
-| WIENER | 0 / 45 | 0.00% | 6.67% |
+| **WIENER** | **0 / 45** | **0.00%** | 6.67% |
 
-The three WIENER trials the attack succeeded against were all held at the gate
-— 2 `BLOCK`, 1 `REVIEW`, 0 executed. That is the whole claim in one table: the
-attack succeeds against the model, and the execution boundary does not yield.
+The baseline moved because the model is a floating alias and the run is a
+measurement, not a fixed property. WIENER's UAR is 0.00% in both runs, against
+baselines of 26.67% and 11.11%. The 12 unsafe executions in the headline table
+are the more demanding comparison, which is why it is presented first.
+
+### What is in the repository
+
+| Directory | What it is | Status |
+| --- | --- | --- |
+| `authoritative_20260912_clean_2252` | 135-trial live benchmark, 45 x 3 modes. **Source of the headline table above.** | `LOCKED_VERIFIED`, PASS 16 / 16. Produced under the 16-invariant checklist in force at the time. |
+| `authoritative_20260926_1000` | 135-trial live benchmark re-run with provider-identity verification. | `LOCKED_VERIFIED`, PASS 18 / 18, provenance CLEAN at run time. |
+| `authoritative_20260925_zero_degraded` | 135-trial benchmark on a degraded transport. | Historical. Its `model` field records a transport name on 90 of 135 rows and no trial recorded its decoding temperature, so it does **not** satisfy the current checklist. Kept unmodified. |
+| `enforcement_ablation_reference` | A separate experiment answering "is safety from the prompt or from the gate?" | Current, deterministic, offline. |
 
 ### What "locked" does and does not mean
 
-The run is locked **as of the code revision that produced it**. Two facts are
+A run is locked **as of the code revision that produced it**. Two facts are
 reported separately and neither is collapsed into the other:
 
-- **Evidence status** — `LOCKED_VERIFIED`, 18 / 18, artifacts intact, metrics
-  reproducible. A property of the bundle.
-- **Current provenance** — whether this bundle still describes the *current*
-  tree. A property of the comparison, recomputed on every page load.
+- **Evidence status** — `LOCKED_VERIFIED`, validation passing, artifacts intact,
+  metrics reproducible. A property of the bundle.
+- **Current provenance** — whether that bundle still describes the *current*
+  tree. A property of the comparison, not of the run.
 
-`app/present/*` is inside the code fingerprint, so presentation and identity
-work committed after the run makes the current tree differ. The dashboard says
-so explicitly (`ARTIFACTS INTACT · RESULTS UNCHANGED · PRODUCED BY AN EARLIER
-REVISION OF THE TREE`) rather than implying the results are current. The run is
-not re-executed to make a cosmetic change look fresh.
-
-Whether the presentation layer belongs inside the experiment fingerprint is an
-open question with a real trade-off, and is deliberately not decided here.
+Removing the presentation layer and the dashboard changed the tree after both
+runs were locked, so current provenance is now expected to read `STALE`. That is
+the honest state and it is left visible: artifacts intact, results unchanged,
+produced by an earlier revision of the tree. Neither run is re-executed to make
+a cosmetic change look fresh, and no stored metric, manifest, or hash was edited
+during cleanup.
 
 ### Model identity
 

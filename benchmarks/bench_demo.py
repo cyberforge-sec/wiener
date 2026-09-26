@@ -104,7 +104,7 @@ def cold_start() -> dict:
         "t0=time.perf_counter()\n"
         f"sys.path.insert(0,{str(ROOT)!r})\n"
         "from app.orchestration.pipeline import Pipeline\n"
-        "from app.dashboard.dashboard import build_dashboard  # noqa\n"
+        "from app.judge import render_main_view  # noqa\n"
         "t1=time.perf_counter()\n"
         "Pipeline()\n"
         "t2=time.perf_counter()\n"

@@ -72,7 +72,7 @@ class AdaptiveSeedLoader(SeedLoader):
     """Loads the SEPARATE `adaptive_seeds` list (interactive demo pool).
 
     Kept apart from the authoritative `seeds` list on purpose: the recorded
-    benchmark, orchestrator capabilities, and /dashboard all derive from
+    benchmark and orchestrator capabilities both derive from
     `SeedLoader().seeds`, and must never grow with the adaptive demo pool.
     Uses the same strict AttackSeed validation as `seeds`.
 

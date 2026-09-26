@@ -81,7 +81,7 @@ class SOCOutput(BaseModel):
 class Trajectory(BaseModel):
     """Complete context for the blue-side analysis.
 
-    Must preserve enough information for: Blue AI, Logger, Dashboard,
+    Must preserve enough information for: Blue AI, Logger,
     Metrics, Replay.
     """
 

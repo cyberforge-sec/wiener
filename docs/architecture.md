@@ -80,8 +80,6 @@ app/policy_gate/     deterministic ALLOW / REVIEW / BLOCK decision
 app/tools/           simulation-only executor
 app/replay/          recorded deterministic scenarios and CLI
 app/experiment/      experiment runner and validation
-app/dashboard/       stored-report dashboard
-app/present/         curated-evidence presentation view
 app/logger/          JSONL trajectory logging
 ```
 
@@ -92,8 +90,8 @@ Red AI seeds. `app/models.py` is the canonical data-contract module.
 
 `ALLOW` permits only a simulated result; `REVIEW` and `BLOCK` refuse simulated
 execution. Optional JSONL logs and cloud diagnostics are runtime output and
-are excluded from the public repository. The dashboard reads persisted
-artifacts only; it does not run a pipeline or manufacture metrics.
+are excluded from the public repository. The shipped authoritative evidence
+under `data/experiments/` is read-only and is never recomputed at runtime.
 
 ## Non-goals
 

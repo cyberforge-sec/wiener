@@ -82,7 +82,7 @@ SOCOutput is a **proposal** — it never carries a final decision, risk_score, o
 | `metadata` | `dict[str, Any]` | reserved |
 
 Trajectory is the canonical object passed to Blue AI. It must preserve enough for: Blue AI,
-Logger, Dashboard, Metrics, Replay.
+Logger, Metrics, Replay.
 
 ## BlueAssessment
 

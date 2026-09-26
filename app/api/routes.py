@@ -1,17 +1,11 @@
 from __future__ import annotations
 
-import dataclasses
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
-from ..dashboard import DashboardData, ReportStore, build_dashboard, render_html
-from ..dashboard.store import ReportStoreError
-from ..metrics.core import MetricsError
-from ..present.evidence import build_evidence_dashboard, load_errors
-from ..present.render import presentation_page
 from ..judge import (
     JudgeInputError,
     get_session,
@@ -35,12 +29,6 @@ from ..models import (
 from ..orchestration.pipeline import Pipeline, PipelineResult
 
 router = APIRouter()
-
-_NO_CACHE = {
-    "Cache-Control": "no-store, no-cache, must-revalidate",
-    "Pragma": "no-cache",
-    "Expires": "0",
-}
 
 _LOGO_PATH = Path(__file__).resolve().parent.parent / "judge" / "logo.png"
 
@@ -79,66 +67,6 @@ def analyze(context: SOCContext) -> dict:
 @router.get("/health")
 def health() -> dict:
     return {"status": "ok", "provider": active_provider_name()}
-
-
-def _latest_dashboard(trial: str | None):
-    """Preferred presentation path: the LOCKED authoritative run. Falls back to
-    the latest stored generic ExperimentReport only when the locked artifacts
-    are missing or unreadable.
-
-    Fail-closed: a present-but-corrupt evidence directory (bad JSON, no trial
-    rows) must not degrade into an empty "no data" dashboard, so it surfaces as
-    HTTP 503 with the reason instead of silently showing zeros.
-    """
-    data = build_evidence_dashboard()
-    if data.evidence is not None:
-        return data
-    if load_errors:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "authoritative evidence is present but could not be parsed: "
-                + "; ".join(load_errors)
-            ),
-        )
-    try:
-        report = ReportStore().load_latest()
-    except ReportStoreError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    if report is None:
-        return None
-    try:
-        return build_dashboard(report)
-    except MetricsError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail=f"stored report metrics could not be computed: {exc}",
-        ) from exc
-
-
-@router.get("/dashboard")
-def dashboard(trial: str | None = None, format: str = "html"):
-    """Render the WIENER dashboard from the stored experiment report.
-
-    The dashboard is a read-only VIEW of persisted ExperimentReport data;
-    it never runs the pipeline or fabricates values.
-
-    Served with ``Cache-Control: no-store`` so the page always reflects the
-    current evidence artifact (locked run resolution happens per request).
-    """
-    data = _latest_dashboard(trial)
-    if data is None:
-        empty = DashboardData.empty()
-        if format == "json":
-            return JSONResponse({"empty": True}, headers=_NO_CACHE)
-        return HTMLResponse(render_html(empty), headers=_NO_CACHE)
-
-    if format == "json":
-        return JSONResponse(dataclasses.asdict(data), headers=_NO_CACHE)
-    if data.evidence is not None:
-        return HTMLResponse(presentation_page(data, selected=trial), headers=_NO_CACHE)
-    return HTMLResponse(render_html(data, selected=trial), headers=_NO_CACHE)
-
 
 
 class JudgeRunRequest(BaseModel):

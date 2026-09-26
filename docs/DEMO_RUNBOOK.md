@@ -19,7 +19,7 @@ Goal: stable demo, minimal latency variance, no surprise processes.
       `cloud → local Ollama → replay`: Qwen hangat tetap jalan (langkah 2), replay
       deterministik tetap bisa menampilkan hasil instan. Semua langkah 1–3
       tetap berjalan tanpa cloud.
-- [ ] Close every non-essential browser tab. The dashboard is served locally;
+- [ ] Close every non-essential browser tab. Judge Mode is served locally;
       one tab is enough. (Large open tab counts measurably hurt an i5's
       shared caches.)
 - [ ] Ollama is already running in a separate terminal. If it is not, start
@@ -79,8 +79,8 @@ deterministic replay artifact renders instantly.
 ```bash
 # terminal 1: live cloud demo
 WIENER_LLM_FORCE=opencode uvicorn app.main:app --host 0.0.0.0 --port 8000
-# terminal 2: dashboard / judge demo
-#  ... one browser tab to http://localhost:8000
+# terminal 2: Judge Mode
+#  ... one browser tab to http://localhost:8000/judge
 ```
 
 Use `WIENER_LLM_FORCE=local` for a local-only demo, or
@@ -97,5 +97,5 @@ Use `WIENER_LLM_FORCE=local` for a local-only demo, or
 - Cloud timeout → engine already fell back to local; say so, move on.
 - Local timeout (60 s cap) → `ollama serve` died? Restart it, model reloads in
   ~8 s; restart the scenario.
-- Dashboard/render error → replay artifact is deterministic; re-open the report.
+- Judge page/render error → replay artifact is deterministic; re-open the page.
 - Never hot-fix code on stage. The demo path is deterministic-safe by design.

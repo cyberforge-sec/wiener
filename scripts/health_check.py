@@ -4,7 +4,7 @@
 Verifies the nine release-critical areas:
 
   runtime, dependencies, configuration, cloud provider configuration,
-  Qwen availability, Replay availability, logging, dashboard,
+  Qwen availability, Replay availability, logging, Judge Mode page,
   configuration files.
 
 Every area is checked without mutating project state (no log writes, no
@@ -46,7 +46,7 @@ _ORDER = (
     "qwen",
     "replay",
     "logging",
-    "dashboard",
+    "judge-page",
     "config-files",
 )
 
@@ -365,45 +365,38 @@ def _dir_writable(dirpath: Path) -> tuple[bool, str]:
 
 
 
-def check_dashboard():
-    def _store_loads():
-        from app.dashboard.store import ReportStore
+def check_judge_page():
+    """The judge-facing page must serve, and the dashboard must be gone.
 
-        report = ReportStore().load_latest()
-        return True, False, (
-            f"report store loads (latest: {report.experiment_id}, {len(report.trials)} trials)"
-            if report else "report store empty (no experiments yet — empty dashboard is valid)"
-        )
+    HTTP is checked rather than route introspection: this release asserts the
+    endpoint a judge actually opens, which is the only thing that matters, and a
+    404 on /dashboard is now part of the contract rather than an accident.
+    """
 
-    def _build_and_render():
-        from app.dashboard.dashboard import build_dashboard
-        from app.dashboard.render import render_html
-        from app.dashboard.store import ReportStore
+    def _serves():
+        from fastapi.testclient import TestClient
+        from app.main import app
 
-        report = ReportStore().load_latest()
-        if report is None:
-            empty = build_dashboard(ReportStore).__class__.empty()
-            html = render_html(empty)
-            return "WIENER" in html, False, "empty dashboard renders"
-        data = build_dashboard(report)
-        html = render_html(data)
-        from app.metrics import compute_metrics
+        client = TestClient(app)
+        page = client.get("/judge")
+        if page.status_code != 200:
+            return False, True, f"/judge returned {page.status_code}"
+        body = page.text
+        needed = ("/judge/run", "/judge/replay", "scenario", "provider")
+        missing = [n for n in needed if n not in body]
+        if missing:
+            return False, True, f"/judge missing controls: {missing}"
+        return True, False, f"/judge serves ({len(body)} bytes) with all controls present"
 
-        mr = compute_metrics(report)
-        uapr = mr.uapr()
-        return data.experiment_id == report.experiment_id and report.experiment_id in html, False, (
-            f"dashboard renders {len(data.trials)} trials; UAPR={'%.4f' % uapr if uapr is not None else 'n/a'}"
-        )
+    def _dashboard_is_gone():
+        from fastapi.testclient import TestClient
+        from app.main import app
 
-    _run("dashboard", "store-load", _store_loads)
-    _run("dashboard", "build-and-render", _build_and_render)
-    _run("dashboard", "route-wired", lambda: (
-        importlib.import_module("app.main").app.routes is not None,
-        False,
-        "FastAPI app exposes routes (analyze/health/dashboard/judge)",
-    ))
+        code = TestClient(app).get("/dashboard").status_code
+        return code == 404, code != 404, f"/dashboard returns {code} (expected 404)"
 
-
+    _run("judge-page", "serves", _serves)
+    _run("judge-page", "dashboard-removed", _dashboard_is_gone)
 
 
 def check_config_files():
@@ -467,7 +460,7 @@ def run_health_check() -> list[dict]:
     check_qwen()
     check_replay()
     check_logging()
-    check_dashboard()
+    check_judge_page()
     check_config_files()
     return list(RESULT.checks)
 

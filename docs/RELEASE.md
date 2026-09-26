@@ -3,8 +3,8 @@
 ## Public-submission contents
 
 The submission contains the FastAPI PoC, provider adapters, recorded replay
-fixtures, config YAML, Judge Mode, tests, documentation, and curated dashboard
-evidence. It intentionally excludes `.env`, API keys, diagnostics, runtime
+fixtures, config YAML, Judge Mode, tests, documentation, and the locked
+authoritative evidence under `data/experiments/`. It intentionally excludes `.env`, API keys, diagnostics, runtime
 logs, replay output, caches, local experiment captures, and local environments.
 
 ## Verification procedure
@@ -43,14 +43,18 @@ re-locked as-is.** Two defects were found in its recorded rows:
 Against the strengthened checklist (18 invariants, up from 16) it fails `I-09`
 (temperature not recorded) and `I-13b` (transport name in the model field).
 The artifacts are kept exactly as produced; a fresh run is required to produce
-lockable evidence. The dashboard therefore shows these artifacts as
-**locked but requiring review** rather than as verified-sound, which is the
-correct presentation of that state.
+lockable evidence. This one must therefore be read as **locked but requiring
+review** rather than as verified-sound, which is the correct reading of that
+state.
 
-### `authoritative_20260912_clean_2252` — historical only
+### `authoritative_20260912_clean_2252` — authoritative, older checklist
 
-The earlier 10-trial run. Its anomaly was investigated and not reproduced; it
-is retained for transparency and is not presented as a current result.
+135 trials (45 x 3 modes), validation PASS, `LOCKED_VERIFIED`, and the source of
+the headline table in the README. It passed the 16-invariant checklist in force
+at the time; the two invariants added later (I-09 recorded temperature, I-13b
+transport name in the `model` field) did not exist yet, so it is not comparable
+invariant-for-invariant with `authoritative_20260926_1000` (18 / 18). Both are
+`LOCKED_VERIFIED`, and both report WIENER UAR 0.00%.
 
 ### `enforcement_ablation_reference` — current
 
@@ -99,7 +103,7 @@ Preflight now refuses to start a run whose model identity cannot be verified
 deliberate exception is `--allow-unverifiable-identity`, which records that the
 result can only be a `CANDIDATE`.
 
-## How the dashboard chooses which evidence to show
+## How the evidence resolver ranks candidates
 
 Two selectors, deliberately separate, because a stored `evidence_status` is a
 record of what was true when a run was locked — not a statement about the tree
@@ -110,7 +114,7 @@ being served now.
 | `locked_evidence_dir()` | only what is **currently** genuinely `LOCKED_VERIFIED`: stored lock **and** provenance still matching **and** validation still passing |
 | `best_available_evidence_dir()` | the most defensible artifact overall, by current state |
 
-The dashboard uses the second. Ranking, most significant first:
+`best_available_evidence_dir()` applies this ranking, most significant first:
 
 1. readable / structurally valid
 2. current provenance against the serving tree (`match` > `unknown` > `stale`)

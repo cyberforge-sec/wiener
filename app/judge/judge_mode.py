@@ -12,6 +12,7 @@ from ..orchestration.pipeline import Pipeline, PipelineResult
 from ..red_ai.loop import RedLoop, render_attack
 from ..red_ai.mutator import baseline
 from ..red_ai.seed_loader import AdaptiveSeedLoader, SeedLoader
+from .inference_labels import describe_llm
 
 # The cloud TIER is provider-neutral. "opencode" remains accepted as a
 # legacy alias for it so older requests and stored sessions keep working.
@@ -309,6 +310,12 @@ class JudgeRun:
     adaptive_trace: tuple[AdaptiveStep, ...] = ()
     stopped_reason: str | None = None
     error: str | None = None
+    # Display identity of the provider that actually served this run, captured
+    # when the run happened: {"tier", "provider", "model"}, any value possibly
+    # None. Recorded rather than looked up later so a result on screen keeps
+    # naming the model that produced it after the configuration changes.
+    # Presentation metadata only; the security layer never reads it.
+    inference: dict[str, str | None] | None = None
 
     # Conveniences the renderer relies on.
     @property
@@ -330,6 +337,7 @@ def _new_run(
     trace: tuple[AdaptiveStep, ...] = (),
     stopped_reason: str | None = None,
     run_id: int | None = None,
+    llm: LLMProvider | None = None,
 ) -> JudgeRun:
     return JudgeRun(
         run_id=run_id if run_id is not None else next(_run_ids),
@@ -341,6 +349,7 @@ def _new_run(
         attack=attack,
         adaptive_trace=trace,
         stopped_reason=stopped_reason,
+        inference=describe_llm(llm),
     )
 
 
@@ -441,13 +450,13 @@ def run_judge(
         if scenario == "normal":
             context = NORMAL_CONTEXTS[index % len(NORMAL_CONTEXTS)]
             result = pipeline.run(context)
-            return _new_run(provider, scenario, result, run_id=run_id)
+            return _new_run(provider, scenario, result, run_id=run_id, llm=active)
 
         seed_id = _select_seed(index)
         if scenario == "prompt_injection":
             attack, context = _attack_context(seed_id)
             result = pipeline.run(context)
-            return _new_run(provider, scenario, result, attack=attack, run_id=run_id)
+            return _new_run(provider, scenario, result, attack=attack, run_id=run_id, llm=active)
 
         # Adaptive pool = the SEPARATE `adaptive_seeds` list, NOT the
         # prompt-injection rotation: seeds of varied initial risk so the demo
@@ -534,6 +543,7 @@ def run_judge(
             trace=tuple(assessed),
             stopped_reason=str(report.stopped_reason.value),
             run_id=run_id,
+            llm=active,
         )
     except Exception as exc:  # noqa: BLE001 - never crash a live demo on defense failure.
         return _failed_run(provider, scenario, _describe_error(exc), run_id=run_id)

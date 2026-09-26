@@ -489,13 +489,25 @@ def test_main_view_error_frame():
 
 def test_page_minimal_and_no_debug_controls():
     html = render_page()
-    for provider in ("opencode", "local", "replay"):
+    # One option per inference TIER. `opencode` is a backend alias for the
+    # cloud tier, not a second tier, so offering it as its own row is what
+    # produced two identical "Cloud" entries.
+    for provider in ("openai_compatible", "local", "replay"):
         assert f'value="{provider}"' in html
+    assert 'value="opencode"' not in html
     for scenario in ("normal", "prompt_injection", "adaptive"):
         assert f'value="{scenario}"' in html
     for btn in ("btn-run", "btn-reset", "btn-replay"):
         assert btn in html
     assert "/judge/run" in html and "/judge/replay" in html
+
+
+def test_cloud_alias_is_still_accepted_by_the_backend():
+    """Removing the duplicate UI row must not remove backend compatibility."""
+    from app.judge.judge_mode import validate
+
+    validate("opencode", "normal")
+    validate("openai_compatible", "normal")
 
 
 

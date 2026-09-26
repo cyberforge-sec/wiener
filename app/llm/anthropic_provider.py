@@ -50,6 +50,11 @@ class AnthropicProvider:
 
     name = "anthropic"
 
+    @property
+    def model(self) -> str | None:
+        return self._model
+
+
     def __init__(
         self,
         api_key: str | None = None,

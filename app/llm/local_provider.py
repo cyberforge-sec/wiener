@@ -27,6 +27,15 @@ class LocalProvider:
     """
 
     name = "local"
+    # Which local runtime this adapter speaks. Declared by the adapter itself
+    # rather than hardcoded in the UI, so presentation never has to guess and a
+    # future local runtime describes itself the same way.
+    runtime = "ollama"
+
+    @property
+    def model(self) -> str | None:
+        return self._model
+
 
     def __init__(
         self,

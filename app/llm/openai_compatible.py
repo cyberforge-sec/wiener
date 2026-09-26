@@ -65,6 +65,11 @@ class OpenAICompatibleProvider:
 
     name = "openai_compatible"
 
+    @property
+    def model(self) -> str | None:
+        return self._model
+
+
     # The transport is not the product: kept as an import alias so existing
     # callers and stored evidence keep resolving.
     def __init_subclass__(cls, **kwargs):  # pragma: no cover - defensive

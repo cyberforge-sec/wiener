@@ -16,25 +16,32 @@ from .judge_mode import (
     STAGES,
     AdaptiveStep,
     JudgeRun,
-    PROVIDERS,
     SCENARIOS,
     live_display,
     scenario_chip,
     trial_label,
 )
+from app.judge.inference_labels import (
+    CLOUD,
+    LOCAL,
+    REPLAY,
+    format_inference_label,
+    format_run_label,
+    option_label_for_key,
+    tier_options,
+)
 
-_PROVIDER_LABELS = {
-    "openai_compatible": "Cloud (configurable adapter)",
-    # Legacy alias for the same tier; still selectable, still the same path.
-    "opencode": "Cloud (configurable adapter)",
-    "local": "Local (Ollama)",
-    "replay": "Replay",
-}
 _SCENARIO_LABELS = {"normal": "Normal", "prompt_injection": "Prompt Injection", "adaptive": "Adaptive Attack"}
 
 
-def provider_label(name: str) -> str:
-    return _PROVIDER_LABELS.get(name, name)
+def provider_label(name: str) -> str | None:
+    """Display label for a backend provider key.
+
+    Resolved through the SAME option list the dropdown is built from, so the
+    closed selection can never render a different string than the option it
+    selects. Returns None for an unknown key rather than echoing it.
+    """
+    return option_label_for_key(name)
 
 
 def scenario_label(name: str) -> str:
@@ -117,6 +124,20 @@ def _provider_tier(run: JudgeRun) -> str:
     if run.provider_used == "local" and run.requested_provider not in ("", "local"):
         return "local_fallback"
     return "live"
+
+
+def _source_label(run: JudgeRun) -> str:
+    """Human identity of whatever actually served this run.
+
+    Prefers the run's own recorded identity, so a result stays attributed to the
+    model that produced it even after the configuration changes. A run that
+    never reached a provider reports that plainly instead of borrowing the
+    currently configured label.
+    """
+    if run.error or not run.provider_used:
+        return "No provider served this run"
+    label = format_run_label(run)
+    return label or run.provider_used
 
 
 def _tier_notice(run: JudgeRun) -> str:
@@ -326,7 +347,7 @@ def _main_cards(run: JudgeRun) -> str:
         <div><span class="block text-[10px] uppercase tracking-widest text-neutral-500 mb-0.5">Proposed Action</span><span class="block text-neutral-900">{_esc(action)}</span></div>
         <div><span class="block text-[10px] uppercase tracking-widest text-neutral-500 mb-0.5">Target</span><span class="block text-neutral-900">{_esc(_value(proposal.target))}</span></div>
         <div><span class="block text-[10px] uppercase tracking-widest text-neutral-500 mb-0.5" title="Distance from the nearest policy boundary">Decision Margin</span><span class="block text-neutral-900" data-margin="{_attr(margin)}" title="Distance from the nearest policy boundary">{_esc(margin_text)}</span><span class="block text-[9px] text-neutral-400 mt-0.5">Distance from nearest policy boundary</span></div>
-        <div><span class="block text-[10px] uppercase tracking-widest text-neutral-500 mb-0.5">Source</span><span class="block text-neutral-900">{_esc(_PROVIDER_LABELS.get(run.provider_used, run.provider_used) or "-")}</span></div>
+        <div><span class="block text-[10px] uppercase tracking-widest text-neutral-500 mb-0.5">Source</span><span class="block text-neutral-900">{_esc(_source_label(run))}</span></div>
         <div><span class="block text-[10px] uppercase tracking-widest text-neutral-500 mb-0.5">Policy Decision</span><strong class="block text-neutral-900">{_esc(decision)}{rule_bracket}</strong></div>
         <div><span class="block text-[10px] uppercase tracking-widest text-neutral-500 mb-0.5">Execution</span><strong class="block text-neutral-900" data-tool-executed="{_attr(executed)}" data-tool-status="{_attr(status)}">{_esc(exec_label)}</strong></div>
       </div>
@@ -382,7 +403,7 @@ def _live_trace_section() -> str:
     </summary>
     <div class="pipeline-card bg-white rounded-2xl border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,.04)] mt-3 overflow-hidden">
       <div class="run-context">
-        <span>Run #<b id="live-run-id" class="tabular-nums text-neutral-900 font-semibold">-</b></span><span>\u00b7</span><span id="live-provider">Provider: -</span><span>\u00b7</span><span id="live-scenario">Scenario: -</span>
+        <span>Run #<b id="live-run-id" class="tabular-nums text-neutral-900 font-semibold">-</b></span><span>\u00b7</span><span id="live-provider">Model: -</span><span>\u00b7</span><span id="live-scenario">Scenario: -</span>
       </div>
       <div class="pipeline-wrap">
         <ol id="live-pipeline" class="pipeline" data-stage-order="{','.join(LIVE_STAGE_ORDER)}">
@@ -595,7 +616,7 @@ _JS = r'''
 function escapeHTML(value){return String(value==null?'':value).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function busy(active){['btn-run','btn-replay','btn-reset'].forEach(function(id){var button=document.getElementById(id);if(button)button.disabled=active})}
 async function post(path,body){var response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):null});return{status:response.status,data:await response.json()}}
-function show(response){var status=document.getElementById('status'),view=document.getElementById('main-view');if(response.status>=400||!response.data.ok){status.textContent='';view.className='';view.innerHTML='<div class="run-error"><b>Run failed</b>: '+escapeHTML(response.data.detail||response.data.error||'request failed')+'</div>';return}status.textContent='\u2714 Completed \u00b7 Provider: '+response.data.provider_used+' \u00b7 Scenario: '+response.data.scenario+' \u00b7 Verdict: '+response.data.decision_label;view.className='';view.innerHTML=response.data.html;var shell=view.querySelector('.run-shell');var rid=document.getElementById('live-run-id');if(rid&&shell)rid.textContent=shell.getAttribute('data-run-id')||'-';var prov=document.getElementById('live-provider');if(prov)prov.textContent='Provider: '+(response.data.provider_label||response.data.provider_used||response.data.requested_provider||'-');var scen=document.getElementById('live-scenario');if(scen)scen.textContent='Scenario: '+(response.data.scenario_label||response.data.scenario||'-')}
+function show(response){var status=document.getElementById('status'),view=document.getElementById('main-view');if(response.status>=400||!response.data.ok){status.textContent='';view.className='';view.innerHTML='<div class="run-error"><b>Run failed</b>: '+escapeHTML(response.data.detail||response.data.error||'request failed')+'</div>';return}status.textContent='\u2714 Completed \u00b7 Model: '+(response.data.inference_label||response.data.provider_used||'-')+' \u00b7 Scenario: '+response.data.scenario+' \u00b7 Verdict: '+response.data.decision_label;view.className='';view.innerHTML=response.data.html;var shell=view.querySelector('.run-shell');var rid=document.getElementById('live-run-id');if(rid&&shell)rid.textContent=shell.getAttribute('data-run-id')||'-';var prov=document.getElementById('live-provider');if(prov)prov.textContent='Model: '+(response.data.inference_label||response.data.provider_used||'-');var scen=document.getElementById('live-scenario');if(scen)scen.textContent='Scenario: '+(response.data.scenario_label||response.data.scenario||'-')}
 /* --- Live SSE pipeline trace -------------------------------------------------
    The animation is driven ONLY by backend events delivered over the
    `/judge/stream` server-sent-events endpoint: one `{stage}_started`/
@@ -766,7 +787,7 @@ function resetPipeline(){
     var cc=cards[c].querySelector('[data-stage-chip]');if(cc&&cc.getAttribute('data-idle-chip'))cc.textContent=cc.getAttribute('data-idle-chip');
   }
   var rid=document.getElementById('live-run-id');if(rid)rid.textContent='-';
-  var prov=document.getElementById('live-provider');if(prov)prov.textContent='Provider: -';
+  var prov=document.getElementById('live-provider');if(prov)prov.textContent='Model: -';
   var scen=document.getElementById('live-scenario');if(scen)scen.textContent='Scenario: -';
   clearActivity();
 }
@@ -780,12 +801,12 @@ async function run(){busy(true);closeLive();clearActivity();var view=document.ge
   var tpl=document.getElementById('live-skeleton');
   view.className='';view.innerHTML=tpl?tpl.innerHTML:'<div class="empty-state"><b>No run yet.</b></div>';
   var rid=document.getElementById('live-run-id');if(rid)rid.textContent=data.run_id;
-  var prov=document.getElementById('live-provider');if(prov)prov.textContent='Provider: '+(data.provider_label||data.requested_provider||'-');
+  var prov=document.getElementById('live-provider');if(prov)prov.textContent='Model: '+(data.inference_label||data.provider_used||'-');
   var scen=document.getElementById('live-scenario');if(scen)scen.textContent='Scenario: '+(data.scenario_label||data.scenario||'-');
   status.textContent='Watching live pipeline\u2026';
   _handlers={};
   onSSE('run_started',function(msg){wireStages(msg.stages||[]);queueLive({apply:function(){initPipeline(msg.stages);var mr=document.getElementById('live-run-id');if(mr&&msg.run_id)mr.textContent=msg.run_id;_trailRow('Judge run','Started',msg.ts)}})});
-  onSSE('run_completed',function(msg){_streaming=false;queueLive({apply:function(){closeLive();_trailRow('Result',msg.meta.decision_label||'Completed',msg.ts);status.textContent='\u2714 Completed \u00b7 Provider: '+(msg.meta.provider_used||'')+' \u00b7 Scenario: '+(msg.meta.scenario||'')+' \u00b7 Verdict: '+(msg.meta.decision_label||'');view.className='';view.innerHTML=msg.html;busy(false)}})});
+  onSSE('run_completed',function(msg){_streaming=false;queueLive({apply:function(){closeLive();_trailRow('Result',msg.meta.decision_label||'Completed',msg.ts);status.textContent='\u2714 Completed \u00b7 Model: '+(msg.meta.inference_label||msg.meta.provider_used||'-')+' \u00b7 Scenario: '+(msg.meta.scenario||'')+' \u00b7 Verdict: '+(msg.meta.decision_label||'');view.className='';view.innerHTML=msg.html;busy(false)}})});
   onSSE('run_failed',function(msg){_streaming=false;queueLive({apply:function(){failStageAtRunEnd();closeLive();_trailRow('Result','Failed'+(msg.error?' \u00b7 '+msg.error:''),msg.ts||0);view.className='';view.innerHTML=msg.html||'<div class="run-error"><b>Run failed</b>: '+escapeHTML(msg.error||'no pipeline result')+'</div>';status.textContent='Run failed';busy(false)}})});
   _stream('/judge/stream?run_id='+data.run_id);
 }
@@ -796,14 +817,16 @@ async function reset(){busy(true);try{var response=await post('/judge/reset');va
    result they were looking at. Nothing is re-executed: this only re-renders the
    stored run, and the status line says so, so a restored verdict can never be
    mistaken for a fresh one. */
-async function restoreLast(){try{var response=await fetch('/judge/state',{headers:{'Accept':'application/json'}});if(!response.ok)return;var payload=await response.json();var last=payload&&payload.last;if(!last||!last.html)return;var view=document.getElementById('main-view'),status=document.getElementById('status');view.className='';view.innerHTML=last.html;var shell=view.querySelector('.run-shell');var rid=document.getElementById('live-run-id');if(rid&&shell)rid.textContent=shell.getAttribute('data-run-id')||'-';var prov=document.getElementById('live-provider');if(prov)prov.textContent='Provider: '+(last.provider_used||last.requested_provider||'-');var scen=document.getElementById('live-scenario');if(scen)scen.textContent='Scenario: '+(last.scenario||'-');status.textContent='Showing the last completed run (restored, not re-executed) · Provider: '+(last.provider_used||last.requested_provider||'-')+' · Scenario: '+(last.scenario||'-')+' · Verdict: '+(last.decision_label||'no decision')}catch(_e){/* a failed restore must not break the page */}}
+async function restoreLast(){try{var response=await fetch('/judge/state',{headers:{'Accept':'application/json'}});if(!response.ok)return;var payload=await response.json();var last=payload&&payload.last;if(!last||!last.html)return;var view=document.getElementById('main-view'),status=document.getElementById('status');view.className='';view.innerHTML=last.html;var shell=view.querySelector('.run-shell');var rid=document.getElementById('live-run-id');if(rid&&shell)rid.textContent=shell.getAttribute('data-run-id')||'-';var prov=document.getElementById('live-provider');if(prov)prov.textContent='Model: '+(last.inference_label||last.provider_used||'-');var scen=document.getElementById('live-scenario');if(scen)scen.textContent='Scenario: '+(last.scenario||'-');status.textContent='Showing the last completed run (restored, not re-executed) · Model: '+(last.inference_label||last.provider_used||'-')+' · Scenario: '+(last.scenario||'-')+' · Verdict: '+(last.decision_label||'no decision')}catch(_e){/* a failed restore must not break the page */}}
 document.getElementById('btn-run').addEventListener('click',run);document.getElementById('btn-replay').addEventListener('click',replay);document.getElementById('btn-reset').addEventListener('click',reset);restoreLast();
 '''
 
 
 def render_page() -> str:
     """Standalone interactive judge page; all verdicts come from ``/judge/run``."""
-    provider_options = "".join(f'<option value="{_esc(p)}">{_esc(_PROVIDER_LABELS[p])}</option>' for p in PROVIDERS)
+    provider_options = "".join(
+        f'<option value="{_esc(o["value"])}">{_esc(o["label"])}</option>' for o in tier_options()
+    )
     scenario_options = "".join(f'<option value="{_esc(s)}">{_esc(_SCENARIO_LABELS[s])}</option>' for s in SCENARIOS)
     return f'''<!doctype html>
 <html lang="en">
@@ -869,4 +892,4 @@ def render_page() -> str:
 
 
 def run_to_meta(run: JudgeRun) -> dict:
-    return {"run_id": run.run_id, "requested_provider": run.requested_provider, "provider_used": run.provider_used, "provider_tier": _provider_tier(run), "replay_mode": run.replay_mode, "scenario": run.scenario, "decision": run.decision, "decision_label": _decision_label(run.decision), "proposed_action": run.proposed_action, "error": run.error}
+    return {"run_id": run.run_id, "requested_provider": run.requested_provider, "provider_used": run.provider_used, "provider_tier": _provider_tier(run), "replay_mode": run.replay_mode, "scenario": run.scenario, "decision": run.decision, "decision_label": _decision_label(run.decision), "proposed_action": run.proposed_action, "error": run.error, "inference": run.inference, "inference_label": _source_label(run)}

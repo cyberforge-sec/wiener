@@ -423,13 +423,16 @@ def test_provider_failure_never_yields_allow_or_execution():
 def test_legacy_opencode_import_and_tier_still_work():
     """Stored evidence and older .env files use `opencode`; it must keep
     resolving without being the product's identity."""
-    from app.llm.factory import CLOUD_TIER, CLOUD_TIER_ALIASES, _ladder
+    from app.llm.factory import CLOUD_TIER, CLOUD_TIER_ALIASES, _order_for
     from app.llm.opencode_provider import OpenCodeProvider, OpenAICompatibleProvider
 
     assert OpenCodeProvider is OpenAICompatibleProvider
     assert CLOUD_TIER == "openai_compatible"
     assert "opencode" in CLOUD_TIER_ALIASES
-    assert _ladder() == ["openai_compatible", "local", "replay"]
+    # _order_for, not _ladder(): the ladder definition is what this asserts, and
+    # _ladder() reads WIENER_LLM_FORCE, so it would follow whatever a local .env
+    # happens to select instead of the tier order being claimed here.
+    assert _order_for("") == ["openai_compatible", "local", "replay"]
 
 
 def test_local_provider_uses_the_same_identity_shape():

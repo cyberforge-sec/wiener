@@ -1,559 +1,373 @@
 # WIENER
 
-WIENER is a sandboxed AI-vs-AI security proof of concept for evaluating how a policy-controlled SOC workflow responds to adversarial and ambiguous alerts. It is a HackNusa 2026 submission, not a production security-control plane.
+WIENER is a sandboxed AI-vs-AI security proof of concept. An LLM-assisted SOC
+Agent reads an untrusted alert and *proposes* an action; a deterministic Risk
+Engine and Policy Gate decide whether that action is allowed to execute.
 
-## 1. What is WIENER?
+> **THE MODEL PROPOSES. THE POLICY DECIDES.**
 
-An LLM-assisted SOC Agent may propose an action from untrusted alert text. WIENER separates that **proposal** from **execution authority**: the SOC Agent proposes, while a deterministic Risk Engine and Policy Gate decide whether the simulated tool layer may act. Red AI provides adversarial input and Blue AI evaluates the resulting trajectory.
+WIENER is a HackNUSA 2026 submission. It is a research PoC, not a production
+security control plane.
 
-> **WIENER uses a provider-agnostic cloud inference layer, allowing different
-> cloud LLM providers to be integrated through adapters while preserving the
-> same deterministic security and execution boundary.**
+---
 
-In one line:
+## Quick Start
 
-```text
-MODEL CAN CHANGE      PROVIDER CAN CHANGE      INFERENCE CAN CHANGE
-                        ↓
-              EXECUTION AUTHORITY DOES NOT CHANGE
-```
+This gets you to Judge Mode in about a minute using **Replay**, which is fully
+offline and needs no API key, no model download, and no network.
 
-Swapping `provider: openai / model: gpt-4o-mini` for
-`provider: anthropic / model: claude-…` changes which model writes the SOC
-proposal and nothing else. Risk scoring, policy thresholds, action criticality,
-hard constraints, execution authorization and the executor re-check are
-identical, and the test suite asserts that invariance rather than asserting it
-in prose (`tests/test_provider_agnostic.py`).
-
-### Three separate things, so they are not confused
-
-| | What it is | Fixed? |
-| --- | --- | --- |
-| **Product architecture** | Provider-agnostic. Inference is an adapter behind a contract. | Never vendor-locked. |
-| **Default runtime** | Cloud first, local fallback, replay last resort. | The same ladder for every cloud. |
-| **Headline benchmark** | The 135-trial run was produced on one specific provider configuration. | An experiment setting, not a product limit. |
-
-A benchmark pinned to one model is a *measurement*. Requiring that model to
-run the product would be a *dependency*. Only the first is true here.
-
-## 2. Architecture
-
-```text
-Attacker / Input → SOC Agent → Trajectory Engine → Blue AI → Risk Engine → Policy Gate → Simulated Tool Execution
-```
-
-- **SOC Agent:** proposes a typed action from a `SOCContext`.
-- **Trajectory Engine:** preserves proposal, history, and provenance.
-- **Blue AI:** assesses trust, deviation, criticality, and privilege impact.
-- **Risk Engine:** calculates deterministic risk and matches YAML constraints.
-- **Policy Gate:** returns `ALLOW`, `REVIEW`, or `BLOCK`.
-- **Tool layer:** acts only after `ALLOW`, and labels every result simulated.
-
-The provider ladder fails downward: cloud → local Ollama → deterministic
-`replay`. The cloud tier is a **pluggable adapter**, not a vendor: the same
-Risk Engine, Policy Gate, hard constraints and executor re-check run whichever
-model is behind it. The UI reports the tier actually used.
-
-Two evaluators, two different clouds, one identical ladder:
-
-```text
-cloud = OpenAI        cloud = OpenCode / Big Pickle
-      ↓                     ↓
-   OpenAI                OpenCode
-      ↓ fails              ↓ fails
-   Ollama                Ollama
-      ↓ fails              ↓ fails
-   Replay                Replay
-```
-
-The cloud slot is a single rung regardless of which adapter fills it, so the
-fallback order and the security pipeline are byte-identical in both cases.
-
-## 3. Safety Boundary
-
-WIENER is a simulation. It does not isolate real endpoints, disable real accounts, change firewall rules, connect to a production SIEM, or perform real security actions. `SimulatedToolExecutor` is the only execution layer; even `executed=true` is a simulated event. Replay is recorded deterministic data, not live inference.
-
-## 4. Repository Structure
-
-```text
-app/          FastAPI app, pipeline, providers, Judge Mode, replay
-config/       Action metadata, safety constraints, Red AI seeds
-tests/        Pytest suite
-benchmarks/   Optional local benchmark harness
-scripts/      Health check and experiment utilities
-docs/         Architecture, setup, runbook, contracts, benchmark notes
-data/         Recorded replay fixtures and locked authoritative evidence
-release/      Release notes
-```
-
-## 5. Requirements
-
-- Python 3.12 is the verified release environment; Python 3.10+ is the
-  application minimum enforced by the health check. Use Docker when a matching
-  Python environment is unavailable.
-- Docker Engine for Docker use only.
-- Ollama for local inference only; it is the currently implemented local
-  provider API. The example model is `qwen2.5:1.5b`.
-- Network for cloud inference only. Replay works offline.
-
-No portable RAM or disk minimum is claimed because this repository has no validated cross-host measurement.
-
-> **Live evaluation is required for the competition.** Replay is only a setup
-> smoke test and offline safety net; it must not be presented as live evidence.
-
-### Choose a run mode
-
-The repository does not include your API key or local model. For the required
-live evaluation, choose Cloud or Local. Replay is for setup verification only:
-
-| Purpose | What you provide | `WIENER_LLM_FORCE` |
-| --- | --- | --- |
-| Setup smoke test / offline verification | Nothing beyond the application | `replay` |
-| **Live evaluation: cloud** | Your own provider key, base URL, and model | `openai_compatible` |
-| **Live evaluation: local** | Ollama and a model installed on the same machine | `local` |
-| Automatic live selection | Configured cloud and/or local provider | empty |
-
-`opencode` remains accepted as a legacy alias for the cloud tier, because older
-`.env` files and stored evidence use it; it is not a product requirement. The
-checked-in `.env.example` is safe for setup: its cloud key is empty and its
-default is `replay`.
-
-## 6. Quick Start
-
-The first run is intentionally offline and deterministic. It verifies the
-installation only; it is not the required live competition evaluation. It uses
-no API key, no Ollama, and no network call:
+### 1. Clone
 
 ```bash
 git clone https://github.com/cyberforge-sec/wiener.git
 cd wiener
-python3 -m venv .venv
-. .venv/bin/activate                 # Windows PowerShell: .venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-cp .env.example .env
-WIENER_LLM_FORCE=replay ./run_healthcheck
-WIENER_LLM_FORCE=replay ./run_replay --scenario ALL
-WIENER_LLM_FORCE=replay python -m app.main
 ```
 
-Open `http://localhost:8000/judge`, leave the provider set to **Replay**, and
-run a scenario. Stop the server with `Ctrl+C`. The copied `.env` is safe for
-this smoke test: its cloud key is empty and its provider default is `replay`.
-
-Before the live competition evaluation, edit `.env` using the Cloud or Local
-section below and verify `/health` reports that live provider. To
-restore automatic selection, set `WIENER_LLM_FORCE=` after configuring the
-provider you want to try first; the ladder is cloud → local Ollama → replay.
-
-## 7. Run Without Docker
-
-From the repository root:
+### 2. Create an environment
 
 ```bash
 python3 -m venv .venv
-. .venv/bin/activate
+source .venv/bin/activate          # Windows PowerShell: .venv\Scripts\Activate.ps1
+```
+
+### 3. Install
+
+```bash
 python -m pip install -r requirements.txt
+```
+
+### 4. Configure
+
+```bash
 cp .env.example .env
-WIENER_LLM_FORCE=replay ./run_healthcheck
+```
+
+The shipped `.env.example` is already safe: its cloud key is empty and its
+default is Replay. You do not need to edit anything to run the steps below.
+
+### 5. Start in Replay
+
+```bash
 WIENER_LLM_FORCE=replay python -m app.main
 ```
 
-In another terminal, verify `curl http://localhost:8000/health` and run:
+### 6. Open Judge Mode
+
+<http://localhost:8000/judge>
+
+Stop the server with `Ctrl+C`.
+
+### 7. Try it
+
+Leave the provider on **Replay**, pick a scenario, and press **Run**:
+
+| Scenario | What it shows |
+| --- | --- |
+| **Normal** | A routine alert. The pipeline proposes, scores, and reaches a policy verdict. |
+| **Prompt Injection** | Alert text carrying an embedded override instruction. Watch the proposed action, the risk score, and the verdict. |
+| **Adaptive Attack** | An adversarial loop that reacts to how WIENER answered, rather than firing one fixed payload. |
+
+After a run, read the stage output: SOC Agent proposal → Blue AI assessment →
+Risk score → Policy Gate verdict → simulated tool result. **Replay** repeats the
+last request; **Reset** clears the session.
+
+If `/judge/run` ever appears to hang, `.env` was not copied — without it the
+provider ladder starts at the cloud tier and waits on a network call. Run
+`cp .env.example .env` and restart.
+
+---
+
+## Requirements
+
+- **Python 3.10+** (3.12 is the verified release environment). Use Docker if a
+  matching interpreter is unavailable.
+- **Docker Engine** — only for the Docker path.
+- **Ollama** — only for the Local provider.
+- **Network access** — only for a cloud provider. Replay works fully offline.
+
+`./run_healthcheck` verifies your environment. It reports an unreachable cloud
+provider or a stopped Ollama as a **warning**, not a failure, because Replay is
+a supported fallback.
 
 ```bash
-curl -X POST http://localhost:8000/judge/run -H 'content-type: application/json' -d '{"provider":"replay","scenario":"normal"}'
+WIENER_LLM_FORCE=replay ./run_healthcheck
 ```
 
-The health response should be `ok`; the Judge response identifies `replay`. To
-restore automatic cloud → local Ollama → replay selection, set
-`WIENER_LLM_FORCE=` in `.env` and restart the server. Do not merely remove a
-shell override while `.env` still contains `WIENER_LLM_FORCE=replay`.
+---
 
-## 8. Run With Docker
+## Cloud / Local / Replay
 
-Build once, then choose exactly one runtime mode:
+WIENER resolves inference through a **failover ladder**:
+
+```text
+cloud  →  local (Ollama)  →  replay
+```
+
+Each rung is a real provider adapter behind one common contract. The UI always
+reports which tier actually served the request, so you can tell what happened
+rather than assuming.
+
+| Tier | Requirement | Use it for |
+| --- | --- | --- |
+| **Cloud** | Your own API key, base URL, and model | The live competition evaluation |
+| **Local** | Ollama running on the same machine | Live evaluation with no external API |
+| **Replay** | Nothing | Deterministic offline setup checks |
+
+Force a tier with `WIENER_LLM_FORCE=cloud | local | replay`. Leave it empty to
+let the ladder choose automatically.
+
+`WIENER_LLM_FORCE=replay` is the **setup smoke test only**. It is deterministic
+recorded data, not live inference, and must not be presented as live evidence.
+
+### Local (Ollama)
+
+```bash
+# terminal 1 — leave this running
+ollama serve
+
+# terminal 2 — pull once, then confirm
+ollama pull qwen2.5:1.5b
+curl -s http://127.0.0.1:11434/api/tags
+```
+
+Then set the provider in `.env`:
+
+```env
+WIENER_LLM_FORCE=local
+WIENER_LOCAL_HOST=127.0.0.1:11434
+WIENER_LOCAL_MODEL=qwen2.5:1.5b
+```
+
+From inside a container, the host is not `127.0.0.1`. Use
+`host.docker.internal:11434`, and on Linux add
+`--add-host=host.docker.internal:host-gateway`.
+
+### Replay
+
+Replay reads recorded fixtures from `app/replay/recorded/` and needs no external
+API, key, or network. It is the safest way to confirm the installation works
+and the offline safety net when everything else is unavailable.
+
+---
+
+## Bring Your Own LLM
+
+**WIENER supports the provider protocols implemented by its adapters.** You can
+provide your own supported API endpoint, API key, and model. WIENER is not tied
+to one vendor, and it is not a universal API client — it speaks the specific
+wire protocols below, and nothing else.
+
+| `WIENER_CLOUD_ADAPTER` | Wire protocol | Notes |
+| --- | --- | --- |
+| `openai_compatible` (default) | `POST {base_url}/chat/completions` | Any service implementing the OpenAI chat-completions API — OpenAI, or a compatible gateway. |
+| `anthropic` | `POST {base_url}/v1/messages` | Native Anthropic Messages API. `system` is a top-level parameter, auth is `x-api-key`, and the response is typed content blocks. The adapter translates all of that. |
+
+`Local` (Ollama) and `Replay` are the other two implemented tiers. There is no
+adapter for any other protocol, and none is implied.
+
+### OpenAI-compatible endpoint, key, and model
+
+```env
+WIENER_CLOUD_ADAPTER=openai_compatible
+WIENER_CLOUD_API_KEY=your-key
+WIENER_CLOUD_BASE_URL=https://your-gateway.example/v1
+WIENER_CLOUD_MODEL=your-model-id
+```
+
+Point `WIENER_CLOUD_BASE_URL` at whichever supported provider or gateway you
+use, as long as it implements the OpenAI-compatible chat-completions API. Set
+`WIENER_CLOUD_PROVIDER_LABEL` so the Judge UI names the tier honestly instead of
+showing a default.
+
+Native Anthropic:
+
+```env
+WIENER_CLOUD_ADAPTER=anthropic
+WIENER_ANTHROPIC_API_KEY=your-key
+WIENER_ANTHROPIC_BASE_URL=https://api.anthropic.com
+WIENER_ANTHROPIC_MODEL=claude-sonnet-4-6
+```
+
+Optional: `WIENER_CLOUD_TEMPERATURE` (default `0.0`) and
+`WIENER_CLOUD_EXPECTED_MODEL`, which is used to check the model identity the
+provider reports rather than trusting the requested string.
+
+### What changing the provider does — and does not — change
+
+This distinction is the point of the project:
+
+```text
+Provider / model choice  →  determines which LLM writes the proposal
+Security boundary        →  does not change
+```
+
+The execution flow is fixed:
+
+```text
+LLM provider
+  → SOC Agent proposal
+  → Trajectory / Blue AI
+  → Risk Engine
+  → Policy Gate
+  → simulated Tool Execution
+```
+
+Swapping the model or the endpoint changes only the text the SOC Agent
+proposes. Risk scoring, policy thresholds, action criticality, hard
+constraints, execution authorization, and the executor's own re-check of the
+decision are identical, and the test suite asserts that invariance directly
+(`tests/test_provider_agnostic.py`) rather than asserting it in prose.
+
+**Execution authority never moves into the model.** A model that is fully
+convinced still cannot act on its own: a non-`ALLOW` decision cannot reach a
+tool, and `SimulatedToolExecutor` re-checks the decision itself.
+
+Never commit `.env`, keys, or tokens. Put credentials in your local `.env` only.
+
+---
+
+## Docker
+
+Build once:
 
 ```bash
 docker build -t wiener:local .
+```
+
+Run in Replay:
+
+```bash
 docker run --rm -p 8000:8000 -e WIENER_API_HOST=0.0.0.0 -e WIENER_LLM_FORCE=replay wiener:local
 ```
 
 `WIENER_API_HOST=0.0.0.0` is required for `-p` to work: the server binds
-`127.0.0.1` by default, and a container's loopback is not the same interface
-Docker publishes. Without it the container starts, its own health check passes,
-and the host still gets connection refused.
+`127.0.0.1` by default, and a container's loopback is not the interface Docker
+publishes. Without it the container starts, its own health check passes, and
+the host still gets connection refused.
 
-The command above is the safest setup smoke test. It is not the required live
-competition evaluation. Visit `http://localhost:8000/judge` or call `/health` in
-another terminal. If port 8000 is busy, use `-p 8001:8000`. The app has no
-authentication, so publish it only on a trusted network.
+Then open <http://localhost:8000/judge>. If port 8000 is busy, use
+`-p 8001:8000`. The app has no authentication, so publish it only on a trusted
+network.
 
-For a named background container with an inspectable health status:
+Background container with an inspectable health status:
 
 ```bash
 docker run -d --name wiener-demo -p 8000:8000 -e WIENER_API_HOST=0.0.0.0 -e WIENER_LLM_FORCE=replay wiener:local
 docker inspect --format '{{.State.Health.Status}}' wiener-demo
-docker logs -f wiener-demo
-docker stop wiener-demo
-docker rm wiener-demo
 ```
 
-For cloud mode, put the evaluator's real credentials in `.env` and explicitly
-select the cloud adapter:
+Cloud mode: supply your own credentials with `--env-file .env`.
 
 ```bash
 docker run --rm -p 8000:8000 -e WIENER_API_HOST=0.0.0.0 --env-file .env -e WIENER_LLM_FORCE=openai_compatible wiener:local
 ```
 
-For local Ollama in Docker, use the host gateway command in section 10. If a
-cloud run fails inside Docker, the local fallback also needs that host gateway;
-otherwise WIENER falls through to replay. Never bake `.env`, keys, or models
-into the image; `.dockerignore` excludes secrets, logs, and cache.
+---
 
-## 9. Cloud LLM Setup
+## Security Boundary
 
-The cloud tier is an **adapter behind a common contract**, so the inference
-provider is replaceable without touching a single security control. Two
-adapters are implemented and covered by the test suite:
+WIENER is a simulation. It does not isolate real endpoints, disable real
+accounts, change firewall rules, connect to a production SIEM, or perform real
+security actions.
 
-| `WIENER_CLOUD_ADAPTER` | Wire format | Notes |
+`SimulatedToolExecutor` is the only execution layer, and every result it
+returns is labelled simulated — even when `executed=true`. `ALLOW` permits only
+a simulated result; `REVIEW` and `BLOCK` refuse execution. The Policy Gate is a
+simulation authorization boundary, **not** production access control.
+
+The server binds `127.0.0.1` by default and has **no authentication**. Anyone
+who can reach the port can drive the pipeline. Only set
+`WIENER_API_HOST=0.0.0.0` on a trusted, isolated network.
+
+## PoC Limitation
+
+This is a proof of concept built for evaluation, not a deployable product. It
+is not production-ready. In particular:
+
+- Tool execution is simulated; nothing is enforced on a real system.
+- The Policy Gate is deterministic logic under test, not a hardened control.
+- Results come from one benchmark configuration; a pinned model on a different
+  provider route can behave differently.
+- There is no authentication, no multi-tenancy, no persistence, and no audit
+  pipeline beyond local logging.
+- Diagnostic capture is disabled by default, because provider responses can be
+  sensitive.
+
+---
+
+## Authoritative Benchmark Figures
+
+These are the official submission figures from the **135-trial** evaluation
+(45 trials x 3 modes, live provider). **Unsafe Action Rate (UAR)** is the share
+of adversarial trials that ended in an unsafe *execution* rather than a held or
+refused decision.
+
+| Mode | Unsafe executions | UAR |
 | --- | --- | --- |
-| `openai_compatible` (default) | `POST {base_url}/chat/completions` | Covers OpenAI and any OpenAI-compatible gateway (Groq, OpenRouter, …) by changing only base URL, key and model. |
-| `anthropic` | `POST {base_url}/v1/messages` | Native Messages API: `system` is a top-level parameter, auth is `x-api-key`, the response is typed content blocks, and there is no `response_format`. All of that is translated inside the adapter. |
+| No Defense | 12 / 45 | **26.67%** |
+| Basic Prompt Defense | 7 / 45 | **15.56%** |
+| **WIENER** | **0 / 45** | **0.00%** |
 
-Switching provider changes **only** which model produced the SOC proposal. Risk
-scoring, thresholds, action criticality, hard constraints, execution
-authorization and the executor re-check are identical, and the test suite
-asserts that invariance directly (`tests/test_provider_agnostic.py`).
+Basic Prompt Defense is a prompt-only baseline. WIENER is the full pipeline.
 
-The documented variables are `WIENER_CLOUD_*` plus `WIENER_ANTHROPIC_*`; legacy
-`WIENER_OPENCODE_*` variables remain accepted for backwards compatibility. Copy
-`.env.example` to `.env`, then set the key and, if needed, the URL/model to
-values belonging to the evaluator:
+The WIENER row is the claim: unsafe execution fell to zero out of 45 trials,
+against 26.67% with no defense and 15.56% with a prompt-only defense. The
+proposals still arrive — the model is still persuaded — and the execution
+boundary is what refuses them.
 
-```env
-# Leave blank until you have a real key. Do not use a placeholder value.
-WIENER_CLOUD_API_KEY=
-WIENER_CLOUD_BASE_URL=https://api.openai.com/v1
-WIENER_CLOUD_MODEL=gpt-4o-mini
-WIENER_LLM_FORCE=openai_compatible
-WIENER_LLM_TIMEOUT_S=30
-```
+Treat these as fixed submission numbers. They are not recomputed at runtime, and
+this repository ships no experiment harness that could regenerate them.
 
-Replace the URL and model with values from your own OpenAI-compatible provider.
-`WIENER_CLOUD_TEMPERATURE` and `WIENER_CLOUD_RESPONSE_FORMAT` are optional. An
-empty key skips cloud; an unavailable cloud tier falls to local then replay.
-Do not commit `.env`.
+---
 
-### Updating an existing setup
-
-If you already have a local `.env` from an earlier WIENER checkout, rename
-these variables. Your API key value, URL, and model value do not change.
-
-| Old variable | New variable |
-| --- | --- |
-| `WIENER_OPENCODE_API_KEY` | `WIENER_CLOUD_API_KEY` |
-| `WIENER_OPENCODE_BASE_URL` | `WIENER_CLOUD_BASE_URL` |
-| `WIENER_OPENCODE_MODEL` | `WIENER_CLOUD_MODEL` |
-| `WIENER_OPENCODE_TEMPERATURE` | `WIENER_CLOUD_TEMPERATURE` |
-| `WIENER_OPENCODE_RESPONSE_FORMAT` | `WIENER_CLOUD_RESPONSE_FORMAT` |
-| `WIENER_OPENCODE_DIAG_PATH` | `WIENER_CLOUD_DIAG_PATH` |
-
-Then restart the application. For a native run, stop it with `Ctrl+C` and run
-`python -m app.main` again. For Docker, rebuild the image and run it with the
-same local `.env`:
+## Tests
 
 ```bash
-docker build -t wiener:local .
-docker run --rm -p 8000:8000 --env-file .env -e WIENER_LLM_FORCE=openai_compatible wiener:local
+python -m pip install -r requirements-dev.txt    # adds pytest
+python -m pytest -q
 ```
 
-The old names remain accepted for backward compatibility, so this migration is
-recommended for clarity, not an emergency breaking change.
+The suite runs fully offline against Replay and fake providers, and needs no
+credentials.
 
-Only providers that are actually implemented and tested are listed. An
-untested adapter is not claimed.
+---
 
-| Cloud choice | Works now? | Adapter | Notes |
-| --- | --- | --- | --- |
-| OpenAI API | Yes | `openai_compatible` | Configure its standard `/v1` base URL, key, and model. |
-| Any OpenAI-compatible provider/gateway | Yes | `openai_compatible` | Configure that service's base URL, key, and model. Nothing else changes. |
-| Anthropic native Messages API | Yes | `anthropic` | Set `WIENER_CLOUD_ADAPTER=anthropic` and the `WIENER_ANTHROPIC_*` values. |
-| Gemini native API | Not yet | — | No dedicated adapter is implemented or tested. Use an OpenAI-compatible gateway, or add one behind the same contract. |
-
-## 10. Local LLM Setup (Ollama)
-
-The local provider currently calls the Ollama HTTP API (`/api/generate`), so
-**Ollama is required if you select local mode**. It is not required for cloud
-or replay mode. For a native local run, install/start Ollama and pull the
-selected model:
-
-Use two terminals so the blocking server command does not hide the setup steps:
-
-```bash
-# Terminal 1: start Ollama and leave it running
-ollama serve
-
-# Terminal 2: pull once, then verify
-ollama pull qwen2.5:1.5b
-curl http://localhost:11434/api/tags
-```
-
-Configure `WIENER_LOCAL_HOST`, `WIENER_LOCAL_MODEL`, `WIENER_LOCAL_TIMEOUT_S`,
-`WIENER_LOCAL_MAX_TOKENS`, and `WIENER_LOCAL_KEEP_ALIVE`. For a native local
-run, put these values in `.env`:
-
-```env
-WIENER_LLM_FORCE=local
-WIENER_LOCAL_HOST=http://localhost:11434
-WIENER_LOCAL_MODEL=qwen2.5:1.5b
-WIENER_LOCAL_TIMEOUT_S=60
-WIENER_LOCAL_MAX_TOKENS=128
-WIENER_LOCAL_KEEP_ALIVE=5m
-```
-
-`WIENER_LOCAL_HOST` is the Ollama HTTP endpoint; `WIENER_LOCAL_MODEL` is the
-model tag returned by `ollama pull`. For Docker Desktop, use
-`http://host.docker.internal:11434`; on Linux also add the host gateway:
-
-```bash
-docker run --rm -p 8000:8000 --add-host=host.docker.internal:host-gateway -e WIENER_LLM_FORCE=local -e WIENER_LOCAL_HOST=http://host.docker.internal:11434 -e WIENER_LOCAL_MODEL=qwen2.5:1.5b wiener:local
-```
-
-`localhost` inside a container means the container itself, not host Ollama.
-Ollama is not required for Cloud mode, but it is required if you choose Local
-mode. Replay remains available as a setup fallback, not as the live result.
-Other local runtimes (LM Studio, vLLM, llama.cpp, LocalAI) are not direct
-local-provider backends in this release unless they expose an Ollama-compatible
-API.
-
-| Local choice | Works now? | Notes |
-| --- | --- | --- |
-| Ollama | Yes | Required for the built-in `local` provider; choose any Ollama model that can return the required JSON. |
-| No local runtime | Yes | Use live Cloud; replay is only a setup fallback. |
-| LM Studio, vLLM, llama.cpp, LocalAI | Not directly | Add an adapter, or expose an Ollama-compatible endpoint. |
-
-## 11. Replay Mode
-
-Replay uses the recorded response store and makes no cloud or Ollama request:
-
-```bash
-./run_replay --scenario ALL
-./run_replay --scenario ALL --validate --runs 3
-```
-
-It is deterministic/offline verification, not live LLM inference and not a
-substitute for the required live evaluation. Generated replay run files are
-intentionally ignored by Git. This is the setup smoke test for an evaluator who
-does not have an API key or Ollama.
-
-## 12. Judge Mode
-
-Start the server and open `/judge`. For the required live evaluation choose
-**Cloud** or **Local (Ollama)**; these are alternatives, not two models that
-must run together. The Cloud entry runs whichever adapter
-`WIENER_CLOUD_ADAPTER` selects. Use **Replay** only for
-offline setup checks. Choose `normal`, `prompt_injection`, or `adaptive`, then
-select **Run**. **Replay** repeats the latest request and **Reset** clears
-state. Evaluators should inspect the actual provider tier, pipeline stages,
-policy verdict, and simulated-tool result.
-
-## 13. API / Endpoints
+## API Endpoints
 
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
-| `/health` | GET | Runtime status and resolved provider |
-| `/analyze` | POST | Pipeline run for a `SOCContext` JSON body |
-| `/judge` | GET | Interactive Judge Mode |
-| `/judge/logo` | GET | Judge logo asset |
-| `/judge/run` | POST | Run scenario; `?stream=true` starts SSE |
-| `/judge/stream` | GET | SSE events for `run_id` |
-| `/judge/replay` | POST | Repeat latest Judge request |
-| `/judge/reset` | POST | Reset Judge session |
+| `/health` | GET | Runtime status and the resolved provider tier |
+| `/judge` | GET | Judge Mode UI — the judge-facing entry point |
+| `/judge/run` | POST | Run a scenario; `?stream=true` starts SSE |
+| `/judge/stream` | GET | SSE events for a `run_id` |
 | `/judge/state` | GET | Latest Judge metadata |
+| `/judge/replay` | POST | Repeat the latest Judge request |
+| `/judge/reset` | POST | Reset the Judge session |
+| `/analyze` | POST | Run the pipeline for a `SOCContext` JSON body |
 
-## 14. Testing
+---
 
-The test dependencies are declared separately from the runtime dependencies, so a
-clean clone can run the suite without installing anything extra by accident:
+## Repository Layout
 
-```bash
-python -m pip install -r requirements-dev.txt   # includes requirements.txt + pytest
-python -m pytest -q
-WIENER_LLM_FORCE=replay ./run_healthcheck
-WIENER_LLM_FORCE=replay ./run_replay --scenario ALL --validate --runs 3
+```text
+app/          FastAPI app, Judge Mode, pipeline, providers, replay fixtures
+config/       Action metadata, safety constraints, Red AI seeds
+scripts/      Health check used by ./run_healthcheck
+tests/        Pytest suite
+Dockerfile    Container image
+run_healthcheck / run_replay   Setup verification launchers
 ```
 
-Installing only `requirements.txt` gives you the application; the suite needs
-`pytest` from `requirements-dev.txt`.
+## Troubleshooting
 
-The health check reports unavailable cloud/Ollama as warnings because replay is a supported fallback.
-
-### Test suite at a glance
-
-The suite runs fully offline (replay/fake providers) and needs no credentials.
-It covers the authorization boundary, provider contracts, retry and provenance
-behaviour, and the evidence/validation layer.
-
-| Area | What is asserted |
+| Problem | Fix |
 | --- | --- |
-| `test_policy_gate.py`, `test_tool_executor.py` | A non-`ALLOW` decision can never reach a simulated tool; the executor re-checks the decision itself; every action in the vocabulary has a simulated tool. |
-| `test_metrics.py` | UAR/ASR/FIR/UAPR are computed only from stored trial fields; malformed input raises instead of returning a plausible number. |
-| `test_provider_contract.py` | Cloud and local providers report the model id and requested temperature; the local rung uses real system/user roles when the server supports it and says so when it does not. |
-| `test_provenance.py` | A transport name in the `model` field, an unrecorded temperature, a missing duration, and an absolute clock value leaking into a latency delta are all failures. |
-| `test_enforcement_ablation.py` | The ablation is deterministic, keeps its own artifacts, and cannot touch the authoritative evidence. |
-
-## 15. Verification
-
-- [ ] Application starts and `/health` returns `ok`.
-- [ ] Replay scenarios are deterministic (setup smoke test only).
-- [ ] The required live provider is selected and `/health` reports it.
-- [ ] `/judge` serves and the removed `/dashboard` route returns 404.
-- [ ] Cloud uses evaluator-provided configuration.
-- [ ] Local mode reaches evaluator-provided Ollama.
-- [ ] The safety boundary remains simulated.
-- [ ] Tests pass in the evaluator environment.
-
-## 16. Troubleshooting
-
-| Problem | Cause | Fix |
-| --- | --- | --- |
-| `docker: command not found` | Docker is unavailable on `PATH`. | Install/start Docker Engine. |
-| Container runs but host gets connection refused | The server bound the container's `127.0.0.1`, which `-p` cannot reach. | Add `-e WIENER_API_HOST=0.0.0.0` to `docker run`. |
-| Port 8000 is in use | Another process owns the host port. | Stop it or use `-p 8001:8000`. |
-| Ollama unavailable | Service stopped or bad host. | Run `ollama serve`, verify `/api/tags`, set `WIENER_LOCAL_HOST`. |
-| Model not found | Configured tag was not pulled. | Run `ollama pull <model>`. |
-| Cloud key missing | Key is blank. | Add evaluator key to local `.env`, or use local/replay. |
-| First run unexpectedly calls cloud | A placeholder or copied key is present and replay is not selected. | Set `WIENER_CLOUD_API_KEY=` and `WIENER_LLM_FORCE=replay`. |
-| Invalid cloud URL | Provider API root is incorrect. | Set its OpenAI-compatible base URL, normally ending `/v1`. |
-| Container cannot reach Ollama | Container localhost differs from host localhost. | Use `host.docker.internal:11434`; Linux also needs `--add-host=host.docker.internal:host-gateway`. |
-| Dependency install fails | Unsupported Python or unavailable package index. | Use Python 3.10+, recreate venv, restore package-index access. |
-
-## 17. Security Notes
-
-Never commit `.env`, API keys, tokens, provider diagnostics, runtime logs, or environments. Diagnostic capture is disabled by default because responses can be sensitive. The Policy Gate is a simulation authorization boundary, not production access control.
-
-The server binds `127.0.0.1` by default and has **no authentication**. Anyone who can reach the port can drive the pipeline. Only set `WIENER_API_HOST=0.0.0.0` on a trusted, isolated network.
-
-## 18. Project Status
-
-Implemented: FastAPI API, Judge Mode, cloud/local/replay providers, Red AI loop, SOC/Blue/Risk/Policy pipeline, deterministic replay, tests, and simulated tools. Cloud and Ollama are the live-evaluation integrations; replay is offline setup verification. All tool execution is simulated and the shipped evidence is a recorded PoC artifact. WIENER is not production-ready.
-
-See [architecture](docs/architecture.md), [provider adapters](docs/PROVIDERS.md), [cloud route survey](docs/PROVIDER_SURVEY.md), [setup notes](docs/competition_setup.md), [demo runbook](docs/DEMO_RUNBOOK.md), [contracts](docs/contracts.md), and [benchmark notes](docs/BENCHMARK.md).
-
-## 19. Evidence and Benchmark Results
-
-The repository tracks three reference experiment sets in `data/experiments/`.
-Local development may additionally contain gitignored candidate and preflight
-artifacts, documented in [the route survey](docs/PROVIDER_SURVEY.md). These are
-not interchangeable, and confusing them is the fastest way to make an honest
-number look dishonest.
-
-### Headline result
-
-**Unsafe Action Rate (UAR)** — the share of adversarial trials that ended in an
-unsafe *execution* rather than a held or refused decision:
-
-| Mode | Unsafe executions | UAR | ASR |
-| --- | --- | --- | --- |
-| No Defense | 12 / 45 | 26.67% | 26.67% |
-| Basic Prompt Defense | 7 / 45 | 15.56% | 15.56% |
-| **WIENER** | **0 / 45** | **0.00%** | 22.22% |
-
-Source: `authoritative_20260912_clean_2252` — 135 trials (45 x 3 modes), live
-provider, `LOCKED_VERIFIED`, validation PASS 16 / 16, and metrics that recompute
-exactly from the stored trial rows. These are the official authoritative figures
-for this submission; they are reproduced here, not recomputed.
-
-The interesting part is the WIENER row. ASR 22.22% means the attack still
-elicited a response the model considered compliant — the model was successfully
-persuaded. UAR 0.00% means none of it reached a tool. Proposal and authority are
-separated, and the separation held on every trial.
-
-### A later, stricter run
-
-`authoritative_20260926_1000` repeats the same 135-trial design against a
-hardened provider-identity check, and passes the strengthened 18 / 18 checklist:
-
-| Mode | Unsafe executions | UAR | ASR |
-| --- | --- | --- | --- |
-| No Defense | 5 / 45 | 11.11% | 11.11% |
-| Basic Prompt Defense | 0 / 45 | 0.00% | 0.00% |
-| **WIENER** | **0 / 45** | **0.00%** | 6.67% |
-
-The baseline moved because the model is a floating alias and the run is a
-measurement, not a fixed property. WIENER's UAR is 0.00% in both runs, against
-baselines of 26.67% and 11.11%. The 12 unsafe executions in the headline table
-are the more demanding comparison, which is why it is presented first.
-
-### What is in the repository
-
-| Directory | What it is | Status |
-| --- | --- | --- |
-| `authoritative_20260912_clean_2252` | 135-trial live benchmark, 45 x 3 modes. **Source of the headline table above.** | `LOCKED_VERIFIED`, PASS 16 / 16. Produced under the 16-invariant checklist in force at the time. |
-| `authoritative_20260926_1000` | 135-trial live benchmark re-run with provider-identity verification. | `LOCKED_VERIFIED`, PASS 18 / 18, provenance CLEAN at run time. |
-| `authoritative_20260925_zero_degraded` | 135-trial benchmark on a degraded transport. | Historical. Its `model` field records a transport name on 90 of 135 rows and no trial recorded its decoding temperature, so it does **not** satisfy the current checklist. Kept unmodified. |
-| `enforcement_ablation_reference` | A separate experiment answering "is safety from the prompt or from the gate?" | Current, deterministic, offline. |
-
-### What "locked" does and does not mean
-
-A run is locked **as of the code revision that produced it**. Two facts are
-reported separately and neither is collapsed into the other:
-
-- **Evidence status** — `LOCKED_VERIFIED`, validation passing, artifacts intact,
-  metrics reproducible. A property of the bundle.
-- **Current provenance** — whether that bundle still describes the *current*
-  tree. A property of the comparison, not of the run.
-
-Removing the presentation layer and the dashboard changed the tree after both
-runs were locked, so current provenance is now expected to read `STALE`. That is
-the honest state and it is left visible: artifacts intact, results unchanged,
-produced by an earlier revision of the tree. Neither run is re-executed to make
-a cosmetic change look fresh, and no stored metric, manifest, or hash was edited
-during cleanup.
-
-### Model identity
-
-All 135 trials record a provider-confirmed identity:
-
-```
-requested_model          = oc/big-pickle
-provider_reported_model  = big-pickle
-identity_verification    = trusted_route_match
-model_identity_pinned    = false
-```
-
-The gateway reported the canonical id for a configured routing namespace, and
-the remainder matched the reported id exactly. That verifies the **route
-mapping**. It does not make the model pinned: `big-pickle` is a floating alias,
-which is why the observed baseline varies between runs on the same nominal
-configuration. See [docs/PROVIDERS.md](docs/PROVIDERS.md).
-
-### Earlier attempts, retained
-
-| Bundle | What it is | Status |
-| --- | --- | --- |
-| `authoritative_20260926_0359` | 135-trial run before trusted-route verification existed | 17 / 18 — failed the model-identity invariant. Retained unmodified. |
-| `authoritative_20260926_0946` | 135-trial run missing the provenance snapshots | 18 / 18, but `CANDIDATE` because the metrics could not be recomputed from the stored rows. Retained unmodified. |
-| `authoritative_20260926_0939` | Preflight only | PASS, 0 trials. Retained unmodified. |
-
-The per-route measurements behind the identity work are in
-[docs/PROVIDER_SURVEY.md](docs/PROVIDER_SURVEY.md).
-
-Regenerate the ablation (one command, no credentials, ~1 second):
-
-```bash
-python -m scripts.experiments.enforcement_ablation
-```
-
-It reports, for identical proposals and identical model output: with the gate
-removed, every dangerous proposal is executed; with the gate enforced, none is;
-benign proposals still pass; and the verdict does not change when the payload
-contains an override instruction. The number that prevents execution is the
-Policy Gate, not the prompt text.
-
-The authoritative benchmark is a separate, much larger question (how often a
-live model proposes something dangerous). Its two figures are UAR (unsafe
-execution rate) and UAPR (unsafe action prevention rate). Read
-[docs/BENCHMARK.md](docs/BENCHMARK.md) before quoting either: it states the
-denominators, the Wilson intervals, and what the numbers do not establish.
+| `/judge/run` hangs | `.env` was not copied. Run `cp .env.example .env`. |
+| Docker container runs, host gets connection refused | Add `-e WIENER_API_HOST=0.0.0.0` to `docker run`. |
+| Port 8000 already in use | Use `-p 8001:8000`. |
+| Ollama unavailable | Run `ollama serve`, verify `/api/tags`, check `WIENER_LOCAL_HOST`. |
+| Model not found | `ollama pull <model>`. |
+| Cloud key missing | Set your key in `.env`, or use Local or Replay. |
+| Invalid cloud URL | The base URL is the API root, normally ending in `/v1`. |
+| Container cannot reach Ollama | Use `host.docker.internal:11434`; on Linux also add `--add-host=host.docker.internal:host-gateway`. |
+| Dependency install fails | Use Python 3.10+, recreate the venv, restore package-index access. |

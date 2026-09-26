@@ -163,7 +163,6 @@ class Config:
         "WIENER_RED_FEEDBACK_LOG", str(_PROJECT_ROOT / "data" / "logs" / "red_feedback.jsonl")
     )
     # Experiment runner: persisted ExperimentReport JSON store (evidence input).
-    EXPERIMENT_STORE_PATH: str = str(_PROJECT_ROOT / "data" / "experiments")
 
     API_HOST: str = os.getenv("WIENER_API_HOST", "127.0.0.1")
     API_PORT: int = int(os.getenv("WIENER_API_PORT", "8000"))

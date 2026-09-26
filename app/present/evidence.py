@@ -172,6 +172,12 @@ class EvidenceBundle:
     artifact_hashes: dict[str, str] | None = None
     source_provenance: dict[str, Any] | None = None
     recompute_diffs: tuple[str, ...] = ()
+    # Which model identity the TRIALS THEMSELVES recorded, lifted from the
+    # rows already in memory. Purely derived for display, so the dashboard
+    # describes the run it is showing rather than the deployment's current
+    # configuration: a model named here is one the evidence actually recorded.
+    # Read-only; nothing downstream depends on it.
+    model_identity: dict[str, Any] | None = None
 
 
 # Stored-row lift: fields copied with resilience, no metric recomputed here.
@@ -397,6 +403,57 @@ def load_evidence(
     return bundle
 
 
+def _recorded_model_identity(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """What model identity the recorded trials agree on, if anything.
+
+    Aggregated from `provider_meta` on the rows themselves rather than read
+    from configuration, so the dashboard can never attribute a stored run to
+    whatever model happens to be configured now. Returns None when the rows
+    recorded no identity, or when they disagree, because a bundle whose rows
+    do not agree on a model has no single model to name.
+    """
+    seen: dict[tuple[Any, ...], int] = {}
+    for row in rows:
+        meta = row.get("provider_meta") or {}
+        if not isinstance(meta, dict):
+            continue
+        key = (
+            meta.get("provider"),
+            meta.get("adapter"),
+            meta.get("requested_model"),
+            meta.get("provider_reported_model"),
+            meta.get("identity_verification"),
+            meta.get("model_identity_pinned"),
+            meta.get("model_identity_reliable"),
+        )
+        if all(part is None for part in key):
+            continue
+        seen[key] = seen.get(key, 0) + 1
+    if not seen:
+        return None
+    if len(seen) > 1:
+        return {"agreed": False, "variants": len(seen)}
+    (provider, adapter, requested, reported, verification, pinned, reliable), rows_n = next(iter(seen.items()))
+    route = None
+    for row in rows:
+        meta = row.get("provider_meta") or {}
+        if isinstance(meta, dict) and isinstance(meta.get("trusted_route_match"), dict):
+            route = meta["trusted_route_match"].get("prefix")
+            break
+    return {
+        "agreed": True,
+        "rows": rows_n,
+        "provider": provider,
+        "adapter": adapter,
+        "requested_model": requested,
+        "provider_reported_model": reported,
+        "identity_verification": verification,
+        "model_identity_pinned": pinned,
+        "model_identity_reliable": reliable,
+        "trusted_route_prefix": route,
+    }
+
+
 def _derive_status(
     validation_status: str | None,
     n_rows: int,
@@ -605,6 +662,7 @@ def _load(dir_path: Path) -> EvidenceBundle:
         artifact_hashes=artifact_hashes,
         source_provenance=source_provenance,
         recompute_diffs=tuple(manifest.get("recompute_diffs") or ()),
+        model_identity=_recorded_model_identity(rows),
     )
 
 

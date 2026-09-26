@@ -87,6 +87,7 @@ class OpenAICompatibleProvider:
         diag_path: str | None = None,
         provider_label: str | None = None,
         expected_model: str | None = None,
+        route_prefixes: tuple[str, ...] | None = None,
     ) -> None:
         self._api_key = api_key if api_key is not None else config.CLOUD_API_KEY
         self._base_url = base_url if base_url is not None else config.CLOUD_BASE_URL
@@ -107,6 +108,14 @@ class OpenAICompatibleProvider:
         self._expected_model = (
             expected_model if expected_model is not None else config.CLOUD_EXPECTED_MODEL
         ) or None
+        # Trusted routing namespaces, configuration only. Overridable per
+        # instance for tests and for deployments that front more than one
+        # gateway; never derived from the model id or a provider response.
+        self._route_prefixes = (
+            tuple(route_prefixes)
+            if route_prefixes is not None
+            else config.CLOUD_MODEL_ROUTE_PREFIXES
+        )
         diag = diag_path if diag_path is not None else config.CLOUD_DIAG_PATH
         self._diag_path = Path(diag).expanduser() if diag else None
         if self._diag_path is not None and not self._diag_path.is_absolute():
@@ -221,6 +230,12 @@ class OpenAICompatibleProvider:
                         deterministic_requested=self._temperature == 0,
                         endpoint="chat/completions",
                         declared_model=self._expected_model,
+                        # Namespaces this gateway is trusted to strip, from
+                        # configuration only. This is what lets a routing
+                        # rewrite such as `oc/big-pickle` -> `big-pickle` be
+                        # verified; without a configured entry the same
+                        # rewrite stays unverified.
+                        trusted_route_prefixes=self._route_prefixes,
                     )
                     return LLMResponse(
                         text=text,

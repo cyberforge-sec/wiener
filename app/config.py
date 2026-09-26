@@ -38,6 +38,38 @@ def _env(primary: str, legacy: str, default: str = "") -> str:
     return os.getenv(primary, os.getenv(legacy, default))
 
 
+def parse_route_prefixes(raw: str) -> tuple[str, ...]:
+    """Parse a trusted model-route namespace list.
+
+    A gateway may route by namespace and report the canonical model id with the
+    prefix stripped (``oc/big-pickle`` -> ``big-pickle``). Naming the namespace
+    explicitly is what makes that rewrite verifiable, so this list is the ONLY
+    thing that can authorize it: it is never inferred from the presence of a
+    slash, from a provider or adapter name, or from either model string.
+
+    Rules, all deliberately strict:
+      - comma-separated, whitespace trimmed;
+      - empty entries ignored;
+      - each entry must end with ``/``;
+      - each entry must name at least one character before the ``/``, so a bare
+        ``/`` cannot authorize a rewrite of everything;
+      - case is preserved, because model ids are case-sensitive and folding it
+        would let ``OC/x`` match a reported ``oc/x``.
+
+    Invalid entries are dropped rather than raising: a typo in a display-facing
+    setting must not stop the service from booting, and dropping one only ever
+    makes verification stricter, never looser.
+    """
+    prefixes: list[str] = []
+    for chunk in str(raw or "").split(","):
+        entry = chunk.strip()
+        if not entry or not entry.endswith("/") or len(entry) < 2:
+            continue
+        if entry not in prefixes:
+            prefixes.append(entry)
+    return tuple(prefixes)
+
+
 @dataclass(frozen=True)
 class Config:
     # Tier selection. The cloud tier is provider-neutral; "opencode" is a
@@ -64,6 +96,15 @@ class Config:
     # id (dated snapshot or explicit version); a floating alias cannot be
     # declared into existence as a verifiable identity.
     CLOUD_EXPECTED_MODEL: str = os.getenv("WIENER_CLOUD_EXPECTED_MODEL", "")
+    # Namespaces this gateway is TRUSTED to strip when it reports a model id,
+    # e.g. "oc/" for a route that answers `oc/big-pickle` as `big-pickle`.
+    # Naming the namespace is the whole point: without an entry here, a
+    # prefix-stripping rewrite stays unverifiable, and with one it is still only
+    # accepted when the stripped requested id equals the reported id EXACTLY.
+    # This says nothing about the backing model being pinned or immutable.
+    CLOUD_MODEL_ROUTE_PREFIXES: tuple[str, ...] = parse_route_prefixes(
+        os.getenv("WIENER_CLOUD_MODEL_ROUTE_PREFIXES", "oc/")
+    )
     # Native Anthropic rung, used only when CLOUD_ADAPTER=anthropic.
     ANTHROPIC_API_KEY: str = os.getenv("WIENER_ANTHROPIC_API_KEY", "")
     ANTHROPIC_BASE_URL: str = os.getenv("WIENER_ANTHROPIC_BASE_URL", "https://api.anthropic.com")

@@ -115,6 +115,8 @@ class Preflight:
         calls: list[dict] = []
         identity_ok = False
         identity_note = _UNSET
+        identity_verification: str | None = None
+        identity_pinned: bool | None = None
         for i in range(3):
             t0 = time.perf_counter()
             try:
@@ -131,6 +133,13 @@ class Preflight:
                     "provider_reported_model": resp.meta.get("provider_reported_model"),
                     "declared_model": resp.meta.get("declared_model"),
                     "model_identity_reliable": resp.meta.get("model_identity_reliable"),
+                    # How the identity was established, and separately whether
+                    # the resulting id is pinned. Recorded so a reader can see
+                    # that a trusted route match is verified WITHOUT being
+                    # pinned, instead of having to infer it.
+                    "identity_verification": resp.meta.get("identity_verification"),
+                    "model_identity_pinned": resp.meta.get("model_identity_pinned"),
+                    "trusted_route_match": resp.meta.get("trusted_route_match"),
                 }
                 if response_contains_json(resp.text):
                     payload["valid_json"] = True
@@ -141,6 +150,8 @@ class Preflight:
                     comp_ok = False
                 if payload["model_identity_reliable"]:
                     identity_ok = True
+                    identity_verification = payload.get("identity_verification")
+                    identity_pinned = payload.get("model_identity_pinned")
                 elif identity_note == _UNSET:
                     identity_note = resp.meta.get("model_identity_note") or "identity unreliable"
                 calls.append(payload)
@@ -164,6 +175,8 @@ class Preflight:
             if identity_ok
             else (identity_note if identity_note is not _UNSET else "identity not reported")
         )
+        if identity_ok and identity_verification:
+            identity_detail += f" (verification={identity_verification}, pinned={identity_pinned})"
         self.add(
             "A1",
             "cloud.model-identity",
